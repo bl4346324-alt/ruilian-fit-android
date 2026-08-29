@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
+        <!-- API 31+ 备份：训练数据库 + DataStore 设置（纯本地 App 无 sharedpref 数据） -->
         <include domain="database" path="." />
-        <include domain="sharedpref" path="." />
+        <include domain="file" path="datastore/" />
     </cloud-backup>
 </data-extraction-rules>

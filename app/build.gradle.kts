@@ -17,11 +17,22 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // ===== 签名：独立 release keystore（app/release.keystore），不再用公开的 debug 签名 =====
+    // 密码为个人测试用途；正式上架前请更换为私有 keystore 并妥善保管（勿提交到仓库）
+    signingConfigs {
+        create("release") {
+            storeFile = file("release.keystore")
+            storePassword = "relifit123"
+            keyAlias = "relifit"
+            keyPassword = "relifit123"
+        }
+    }
+
     buildTypes {
         release {
+            // 上架前可开启 isMinifyEnabled = true 启用 R8 混淆（Compose 需配合 keep 规则）
             isMinifyEnabled = false
-            // 开发期用 debug 签名，release 包可直接安装到手机测试真实流畅度
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

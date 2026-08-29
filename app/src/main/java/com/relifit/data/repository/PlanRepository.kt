@@ -40,34 +40,32 @@ class PlanRepository(private val dao: PlanDao) {
     /** 修改计划类型 */
     suspend fun updatePlanType(id: Long, type: String) = dao.updateType(id, type)
 
-    /** 复制模板生成自定义计划（复制全部训练日与动作条目，名称加"（副本）"） */
+    /** 复制模板生成自定义计划（复制全部训练日与动作条目，名称加"（副本）"，DAO 事务原子提交） */
     suspend fun copyTemplate(template: WorkoutPlan) {
-        val newPlanId = dao.insertPlan(
-            template.copy(
-                id = 0,
-                isTemplate = false,
-                name = template.name + "（副本）",
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis()
-            )
-        )
-        dao.getDays(template.id).forEach { day ->
-            val newDayId = dao.insertDay(day.copy(id = 0, planId = newPlanId))
-            dao.getEntries(day.id).forEach { entry ->
-                dao.insertEntry(entry.copy(id = 0, workoutDayId = newDayId))
-            }
-        }
+        dao.copyTemplateTx(template)
     }
 
-    /** 新增训练日 */
+    /** 新增训练日（同步更新计划 daysPerWeek） */
     suspend fun addDay(planId: Long, dayIndex: Int, name: String, restSec: Int): Long {
-        return dao.insertDay(WorkoutDay(planId = planId, dayIndex = dayIndex, name = name, defaultRestSec = restSec))
+        val id = dao.insertDay(WorkoutDay(planId = planId, dayIndex = dayIndex, name = name, defaultRestSec = restSec))
+        syncDaysPerWeek(planId)
+        return id
     }
 
-    suspend fun deleteDay(dayId: Long) = dao.deleteDay(dayId)
+    /** 删除训练日（同步更新计划 daysPerWeek） */
+    suspend fun deleteDay(dayId: Long) {
+        val day = dao.getDay(dayId) ?: return
+        dao.deleteDay(dayId)
+        syncDaysPerWeek(day.planId)
+    }
 
-    /** 新增动作条目（默认 3 组 × 10 次，组间 60s） */
-    suspend fun addEntry(dayId: Long, exerciseId: Long, sets: Int = 3, reps: Int = 10, restSec: Int = 60) {
+    /** 训练日数量回写计划元数据（列表卡片"每周 N 练"与实际训练日数保持一致） */
+    private suspend fun syncDaysPerWeek(planId: Long) {
+        dao.updateDaysPerWeek(planId, dao.getDays(planId).size.coerceAtLeast(1))
+    }
+
+    /** 新增动作条目（默认 3 组 × 10 次，组间 90s 与设置默认一致） */
+    suspend fun addEntry(dayId: Long, exerciseId: Long, sets: Int = 3, reps: Int = 10, restSec: Int = 90) {
         val maxSort = dao.maxSortOrder(dayId) ?: -1
         dao.insertEntry(
             ExerciseEntry(

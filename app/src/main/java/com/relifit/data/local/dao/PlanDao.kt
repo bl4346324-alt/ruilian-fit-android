@@ -30,11 +30,17 @@ interface PlanDao {
     @Query("SELECT * FROM plans WHERE isTemplate = 1")
     suspend fun getTemplates(): List<WorkoutPlan>
 
+    @Query("SELECT COUNT(*) FROM plans")
+    suspend fun count(): Long
+
     @Insert
     suspend fun insertPlan(plan: WorkoutPlan): Long
 
     @Query("UPDATE plans SET type = :type, updatedAt = :now WHERE id = :id")
     suspend fun updateType(id: Long, type: String, now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE plans SET daysPerWeek = :n, updatedAt = :now WHERE id = :id")
+    suspend fun updateDaysPerWeek(id: Long, n: Int, now: Long = System.currentTimeMillis())
 
     @Query("DELETE FROM plans WHERE id = :id")
     suspend fun deletePlan(id: Long)
@@ -83,4 +89,25 @@ interface PlanDao {
     @Transaction
     @Query("SELECT * FROM exercise_entries WHERE workoutDayId = :dayId ORDER BY sortOrder")
     fun observeEntriesWithExercise(dayId: Long): Flow<List<EntryWithExercise>>
+
+    /** 事务化复制模板：计划 + 全部训练日 + 动作条目原子提交（失败整体回滚，不留半成品） */
+    @Transaction
+    suspend fun copyTemplateTx(template: WorkoutPlan): Long {
+        val newPlanId = insertPlan(
+            template.copy(
+                id = 0,
+                isTemplate = false,
+                name = template.name + "（副本）",
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+        getDays(template.id).forEach { day ->
+            val newDayId = insertDay(day.copy(id = 0, planId = newPlanId))
+            getEntries(day.id).forEach { entry ->
+                insertEntry(entry.copy(id = 0, workoutDayId = newDayId))
+            }
+        }
+        return newPlanId
+    }
 }

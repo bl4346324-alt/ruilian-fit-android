@@ -73,13 +73,21 @@ class HomeViewModel(
         val todayDay = days.firstOrNull { it.day.dayIndex == todayIdx }
 
         // 周进度：按自然周统计训练次数
-        val weekStart = TimeUtils.startOfWeek(System.currentTimeMillis())
-        val weekEnd = weekStart + 7 * 24 * 3600 * 1000L
+        val now = System.currentTimeMillis()
+        val weekStart = TimeUtils.startOfWeek(now)
+        val weekEnd = TimeUtils.endOfWeek(now)
         val weekLogs = logs.filter { it.date in weekStart..weekEnd }
 
-        // 计划周期进度：出现训练记录的不同周数（1..cycleWeeks）
-        val trainedWeeks = logs.map { TimeUtils.startOfWeek(it.date) }.distinct().size
-        val cycleWeek = (trainedWeeks + 1).coerceIn(1, plan.cycleWeeks)
+        // 计划周期进度：只统计本计划的训练日志；以首次训练所在周为第 1 周，
+        // 超过周期自动回绕新一轮（4 周计划练到第 5 周显示 1/4，环图不再恒 100%）
+        val planLogs = logs.filter { it.planId == plan.id }
+        val cycleWeek = if (planLogs.isEmpty()) 0
+        else {
+            val firstWeek = TimeUtils.startOfWeek(planLogs.minOf { it.date })
+            val nowWeek = TimeUtils.startOfWeek(now)
+            val weekNo = ((nowWeek - firstWeek) / (7 * 24 * 3600 * 1000L)).toInt() + 1
+            ((weekNo - 1) % plan.cycleWeeks.coerceAtLeast(1)) + 1
+        }
 
         val weekCount = weekLogs.size
 

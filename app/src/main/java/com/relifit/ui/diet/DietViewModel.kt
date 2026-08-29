@@ -10,10 +10,13 @@ import com.relifit.data.local.entity.FoodItem
 import com.relifit.data.local.entity.MealWithItems
 import com.relifit.data.repository.DietRepository
 import com.relifit.util.TimeUtils
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -40,14 +43,33 @@ data class DietUiState(
  * 饮食记录 ViewModel（PRD 饮食模块）
  * 餐次/食物 +/− 份量联动热量与三大营养素；每日目标可分别自定义
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class DietViewModel(private val repo: DietRepository) : ViewModel() {
 
-    private val dayStart: Long = TimeUtils.startOfDay(System.currentTimeMillis())
+    /** 当前日期（当日零点）；跨天自动切换到新的一天 */
+    private val dayStart = MutableStateFlow(TimeUtils.startOfDay(System.currentTimeMillis()))
 
-    val uiState: StateFlow<DietUiState> = combine(
-        repo.observeDay(dayStart),
-        repo.observeGoal()
-    ) { meals, goal ->
+    val uiState: StateFlow<DietUiState> = dayStart.flatMapLatest { day ->
+        combine(
+            repo.observeDay(day),
+            repo.observeGoal()
+        ) { meals, goal -> buildState(meals, goal) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DietUiState())
+
+    init {
+        viewModelScope.launch {
+            while (true) {
+                // 确保当天餐次存在（幂等），并等待到次日零点自动切换
+                repo.ensureTodayMeals(dayStart.value)
+                val now = System.currentTimeMillis()
+                val nextMidnight = TimeUtils.startOfDay(now) + 24 * 3600 * 1000L
+                delay((nextMidnight - now + 1000).coerceAtLeast(1000))
+                dayStart.value = TimeUtils.startOfDay(System.currentTimeMillis())
+            }
+        }
+    }
+
+    private fun buildState(meals: List<MealWithItems>, goal: DietGoal?): DietUiState {
         val g = goal ?: DietGoal()
         var kcal = 0.0; var carbs = 0.0; var protein = 0.0; var fat = 0.0
         meals.forEach { m -> m.items.forEach { f ->
@@ -56,13 +78,7 @@ class DietViewModel(private val repo: DietRepository) : ViewModel() {
             protein += f.proteinG * f.servings
             fat += f.fatG * f.servings
         } }
-        DietUiState(meals = meals, goal = g, kcal = kcal, carbs = carbs, protein = protein, fat = fat)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DietUiState())
-
-    init {
-        viewModelScope.launch {
-            repo.ensureTodayMeals(dayStart)
-        }
+        return DietUiState(meals = meals, goal = g, kcal = kcal, carbs = carbs, protein = protein, fat = fat)
     }
 
     /** 加一份食物 */

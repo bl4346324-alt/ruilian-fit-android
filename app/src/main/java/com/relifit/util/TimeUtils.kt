@@ -64,8 +64,12 @@ object TimeUtils {
         return cal.timeInMillis
     }
 
-    /** 本周日 23:59:59 */
-    fun endOfWeek(millis: Long): Long = startOfWeek(millis) + 7 * 24 * 3600 * 1000L - 1
+    /** 本周日 23:59:59（用 Calendar 计算下周一零点 -1ms，避免固定 7*24h 在夏令时切换周偏差） */
+    fun endOfWeek(millis: Long): Long {
+        val cal = Calendar.getInstance().apply { timeInMillis = startOfWeek(millis) }
+        cal.add(Calendar.DAY_OF_MONTH, 7)
+        return cal.timeInMillis - 1
+    }
 
     /** 本月 1 号零点 */
     fun startOfMonth(millis: Long): Long {

@@ -174,6 +174,14 @@ class WorkoutViewModel(
 
     private fun stopTotalTimer() { totalTimer?.cancel(); totalTimer = null }
 
+    /** 页面退后台/切走时暂停总计时（后台时长不计入） */
+    fun pauseTotalTimer() { stopTotalTimer() }
+
+    /** 页面恢复时继续总计时（未完成训练才恢复） */
+    fun resumeTotalTimer() {
+        if (totalTimer == null && !_state.value.finished) startTotalTimer()
+    }
+
     /** 组间休息倒计时：结束震动 + 提示；倒计时数字走独立 StateFlow
      *  剩余秒数以 _restLeft 为唯一数据源（restPlus30 修改它即可生效） */
     private fun startRest(sec: Int) {

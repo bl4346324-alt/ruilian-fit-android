@@ -51,13 +51,14 @@ class PlanViewModel(
         workoutRepo.observeLogsWithSets()
     ) { plan, days, exercises, logs ->
         // 周期周数：只统计【本计划】的训练日志（自由训练/其他计划不计入），
-        // 以首次训练所在周为第 1 周，未训练显示 0（修复跨计划串数据与"从未训练也显示第1周"）
+        // 以首次训练所在周为第 1 周，未训练显示 0；超过周期自动回绕新一轮
         val planLogs = logs.filter { it.log.planId == planId }
         val cycleWeek = if (planLogs.isEmpty()) 0
         else {
             val firstWeek = com.relifit.util.TimeUtils.startOfWeek(planLogs.minOf { it.log.date })
             val nowWeek = com.relifit.util.TimeUtils.startOfWeek(System.currentTimeMillis())
-            ((nowWeek - firstWeek) / (7 * 24 * 3600 * 1000L)).toInt() + 1
+            val weekNo = ((nowWeek - firstWeek) / (7 * 24 * 3600 * 1000L)).toInt() + 1
+            ((weekNo - 1) % (plan?.cycleWeeks ?: 4).coerceAtLeast(1)) + 1
         }
         PlanUiState(
             plan = plan,

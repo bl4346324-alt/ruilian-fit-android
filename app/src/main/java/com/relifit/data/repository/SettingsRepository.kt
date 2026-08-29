@@ -46,4 +46,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun setDefaultRestSec(sec: Int) {
         context.dataStore.edit { it[Keys.DEFAULT_REST_SEC] = sec }
     }
+
+    /** 清除全部设置（主题/单位/默认休息秒数恢复默认值） */
+    suspend fun clear() {
+        context.dataStore.edit { it.clear() }
+    }
 }

@@ -143,21 +143,44 @@ fun LogsScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(state.logs, key = { it.log.id }) { logWithSets ->
-                    val expanded = logWithSets.log.id in expandedIds.value
-                    LogCard(
-                        log = logWithSets,
-                        names = state.exerciseNames,
-                        expanded = expanded,
-                        onToggle = {
-                            expandedIds.value = if (expanded) expandedIds.value - logWithSets.log.id
-                            else expandedIds.value + logWithSets.log.id
-                        },
-                        onDelete = { deleteTarget = logWithSets.log.id }
+            if (state.logs.isEmpty()) {
+                // ===== 空态：无记录 / 筛选无结果 =====
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Filled.CalendarMonth, null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("暂无训练记录", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (state.selectedDate != null) "这一天还没有训练，换个日期看看"
+                        else "完成一次训练后会自动生成记录",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                 }
-                item { Spacer(Modifier.height(12.dp)) }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(state.logs, key = { it.log.id }) { logWithSets ->
+                        val expanded = logWithSets.log.id in expandedIds.value
+                        LogCard(
+                            log = logWithSets,
+                            names = state.exerciseNames,
+                            expanded = expanded,
+                            onToggle = {
+                                expandedIds.value = if (expanded) expandedIds.value - logWithSets.log.id
+                                else expandedIds.value + logWithSets.log.id
+                            },
+                            onDelete = { deleteTarget = logWithSets.log.id }
+                        )
+                    }
+                    item { Spacer(Modifier.height(12.dp)) }
+                }
             }
         }
     }

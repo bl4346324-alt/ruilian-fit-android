@@ -18,8 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Warning
@@ -50,7 +48,7 @@ import com.relifit.ui.components.softCardShadow
 import kotlinx.coroutines.flow.collectLatest
 
 /**
- * 动作详情页（Demo 布局）：发力要点 + 易错提醒 + 呼吸节奏 + 离线下载 + 加入训练
+ * 动作详情页（Demo 布局）：发力要点 + 易错提醒 + 呼吸节奏 + 加入训练
  */
 @Composable
 fun ExerciseDetailScreen(
@@ -104,6 +102,21 @@ fun ExerciseDetailScreen(
                 }
             }
 
+            if (ex == null) {
+                // ===== 空态：动作不存在 / 尚未加载到 =====
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Filled.StarBorder, null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("动作不存在或已删除", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
             // 元信息 chips（肌群 / 器械 / 难度）
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppChip(ex?.muscleGroup ?: "", selected = true, onClick = {})
@@ -139,31 +152,6 @@ fun ExerciseDetailScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // 离线下载（Demo 底部主按钮）
-            Button(
-                onClick = { viewModel.toggleOffline() },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                shape = RoundedCornerShape(50),
-                modifier = Modifier.fillMaxWidth().height(54.dp)
-            ) {
-                Icon(
-                    if (ex?.offlineAvailable == true) Icons.Filled.CloudDone else Icons.Filled.CloudOff,
-                    null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (ex?.offlineAvailable == true) "已离线下载，无网可用" else "下载离线教学",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
             // 加入训练（PRD：动作详情可加入训练列表）
             Button(
                 onClick = { onStartWorkout(exerciseId) },
@@ -178,6 +166,7 @@ fun ExerciseDetailScreen(
             }
 
             Spacer(Modifier.height(24.dp))
+            }
         }
     }
 }

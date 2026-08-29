@@ -406,10 +406,11 @@ private fun AddFoodDialog(
         fat = fmtNutrition(info.fatPer100g * g / 100)
     }
 
-    // 名称变化 → 自动填充；份量变化（未手动编辑过）→ 按新份量重算
+    // 名称变化 → 自动填充（仅当用户未手动改过营养值；手动编辑后保留用户输入，不再覆盖）
     LaunchedEffect(name) {
-        manualEdit = false
-        FoodData.search(name).firstOrNull()?.let { fillFrom(it) }
+        if (!manualEdit) {
+            FoodData.search(name).firstOrNull()?.let { fillFrom(it) }
+        }
     }
     LaunchedEffect(qty) {
         if (!manualEdit) FoodData.search(name).firstOrNull()?.let { fillFrom(it) }
@@ -476,12 +477,16 @@ private fun AddFoodDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val mealId = meals.getOrNull(mealIdx)?.meal?.id ?: return@TextButton
-                if (name.isNotBlank() && kcal.toDoubleOrNull() != null) {
-                    onConfirm(mealId, name, qty, kcal.toDouble(), carbs.toDoubleOrNull() ?: 0.0, protein.toDoubleOrNull() ?: 0.0, fat.toDoubleOrNull() ?: 0.0)
-                }
-            }) { Text("添加") }
+            // 名称为空或热量非法时禁用"添加"，避免静默无反馈
+            TextButton(
+                onClick = {
+                    val mealId = meals.getOrNull(mealIdx)?.meal?.id ?: return@TextButton
+                    if (name.isNotBlank() && kcal.toDoubleOrNull() != null) {
+                        onConfirm(mealId, name, qty, kcal.toDouble(), carbs.toDoubleOrNull() ?: 0.0, protein.toDoubleOrNull() ?: 0.0, fat.toDoubleOrNull() ?: 0.0)
+                    }
+                },
+                enabled = name.isNotBlank() && kcal.toDoubleOrNull() != null
+            ) { Text("添加") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

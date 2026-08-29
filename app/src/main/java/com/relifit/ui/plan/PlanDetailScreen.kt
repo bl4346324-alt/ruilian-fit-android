@@ -71,6 +71,9 @@ fun PlanDetailScreen(
     var addDayDialog by remember { mutableStateOf(false) }
     var addEntryDay by remember { mutableStateOf<DayWithEntries?>(null) }
     var editEntry by remember { mutableStateOf<com.relifit.data.local.entity.ExerciseEntry?>(null) }
+    // 删除确认（训练日 / 动作条目），避免误触即丢数据
+    var confirmDeleteDay by remember { mutableStateOf<DayWithEntries?>(null) }
+    var confirmRemoveEntry by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collectLatest { snackbar.showSnackbar(it) }
@@ -174,9 +177,9 @@ fun PlanDetailScreen(
                             names = state.exerciseNames,
                             editMode = editMode,
                             onStart = { onStartWorkout(p.id, day.day.id) },
-                            onDeleteDay = { viewModel.deleteDay(day.day.id) },
+                            onDeleteDay = { confirmDeleteDay = day },
                             onAddEntry = { addEntryDay = day },
-                            onRemoveEntry = { viewModel.removeEntry(it) },
+                            onRemoveEntry = { confirmRemoveEntry = it },
                             onEditEntry = { editEntry = it }
                         )
                     }
@@ -250,6 +253,8 @@ fun PlanDetailScreen(
         var sets by remember { mutableStateOf(entry.targetSets.toString()) }
         var reps by remember { mutableStateOf(entry.targetReps.toString()) }
         var rest by remember { mutableStateOf(entry.restSec.toString()) }
+        val setsV = sets.toIntOrNull() ?: 0
+        val repsV = reps.toIntOrNull() ?: 0
         AlertDialog(
             onDismissRequest = { editEntry = null },
             title = { Text("编辑动作参数") },
@@ -263,18 +268,54 @@ fun PlanDetailScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.updateEntry(
-                        entry.id,
-                        sets.toIntOrNull() ?: 3,
-                        reps.toIntOrNull() ?: 10,
-                        rest.toIntOrNull() ?: 60,
-                        entry.targetWeight
-                    )
-                    editEntry = null
-                }) { Text("保存") }
+                // 组数/次数必须 > 0 才可保存
+                TextButton(
+                    onClick = {
+                        viewModel.updateEntry(
+                            entry.id,
+                            setsV,
+                            repsV,
+                            (rest.toIntOrNull() ?: 90).coerceIn(10, 600),
+                            entry.targetWeight
+                        )
+                        editEntry = null
+                    },
+                    enabled = setsV > 0 && repsV > 0
+                ) { Text("保存") }
             },
             dismissButton = { TextButton(onClick = { editEntry = null }) { Text("取消") } }
+        )
+    }
+
+    // ===== 删除训练日确认 =====
+    confirmDeleteDay?.let { day ->
+        AlertDialog(
+            onDismissRequest = { confirmDeleteDay = null },
+            title = { Text("删除训练日？") },
+            text = { Text("将删除「${day.day.name}」及其全部 ${day.entries.size} 个动作，此操作不可撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteDay(day.day.id)
+                    confirmDeleteDay = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeleteDay = null }) { Text("取消") } }
+        )
+    }
+
+    // ===== 删除动作条目确认 =====
+    confirmRemoveEntry?.let { entryId ->
+        AlertDialog(
+            onDismissRequest = { confirmRemoveEntry = null },
+            title = { Text("移除该动作？") },
+            text = { Text("将从训练日中移除该动作，此操作不可撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.removeEntry(entryId)
+                    confirmRemoveEntry = null
+                }) { Text("移除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemoveEntry = null }) { Text("取消") } }
         )
     }
 }
@@ -406,7 +447,9 @@ private fun AddEntryDialog(
     var exId by remember { mutableStateOf(0L) }
     var sets by remember { mutableStateOf("3") }
     var reps by remember { mutableStateOf("10") }
-    var rest by remember { mutableStateOf("60") }
+    var rest by remember { mutableStateOf("90") }
+    val setsV = sets.toIntOrNull() ?: 0
+    val repsV = reps.toIntOrNull() ?: 0
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -439,9 +482,13 @@ private fun AddEntryDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                if (exId > 0) onConfirm(exId, sets.toIntOrNull() ?: 3, reps.toIntOrNull() ?: 10, rest.toIntOrNull() ?: 60)
-            }) { Text("添加") }
+            // 需选择动作且组数/次数 > 0
+            TextButton(
+                onClick = {
+                    if (exId > 0) onConfirm(exId, setsV, repsV, (rest.toIntOrNull() ?: 90).coerceIn(10, 600))
+                },
+                enabled = exId > 0 && setsV > 0 && repsV > 0
+            ) { Text("添加") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

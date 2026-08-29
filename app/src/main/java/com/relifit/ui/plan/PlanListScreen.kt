@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -138,15 +139,37 @@ fun PlanListScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(state.plans, key = { it.id }) { plan ->
-                    PlanRow(
-                        plan = plan,
-                        onClick = { onOpenPlan(plan.id) },
-                        onCopy = { if (plan.isTemplate) viewModel.copyTemplate(plan) }
+            if (state.plans.isEmpty()) {
+                // ===== 空态：无任何计划 =====
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Filled.FitnessCenter, null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("暂无训练计划", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "点击右上角「新建」创建你的第一个计划",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                 }
-                item { Spacer(Modifier.height(16.dp)) }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(state.plans, key = { it.id }) { plan ->
+                        PlanRow(
+                            plan = plan,
+                            onClick = { onOpenPlan(plan.id) },
+                            onCopy = { if (plan.isTemplate) viewModel.copyTemplate(plan) }
+                        )
+                    }
+                    item { Spacer(Modifier.height(16.dp)) }
+                }
             }
         }
     }

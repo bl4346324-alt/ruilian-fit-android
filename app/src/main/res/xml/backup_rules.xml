@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- 训练数据纯本地存储，允许系统备份 -->
+    <!-- API 26–30 系统备份规则：备份训练数据库与 DataStore 设置（files/datastore/） -->
+    <include domain="database" path="." />
+    <include domain="file" path="datastore/" />
 </full-backup-content>

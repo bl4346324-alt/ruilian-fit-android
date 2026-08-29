@@ -15,14 +15,8 @@ class WorkoutRepository(private val dao: WorkoutDao) {
 
     suspend fun getLogsBetween(start: Long, end: Long): List<WorkoutLog> = dao.getLogsBetween(start, end)
 
-    /** 保存一次完整训练：插入 WorkoutLog + 全部 SetRecord */
-    suspend fun saveWorkout(log: WorkoutLog, sets: List<SetRecord>): Long {
-        val logId = dao.insertLog(log)
-        if (sets.isNotEmpty()) {
-            dao.insertSets(sets.map { it.copy(logId = logId) })
-        }
-        return logId
-    }
+    /** 保存一次完整训练：插入 WorkoutLog + 全部 SetRecord（DAO 层事务原子提交） */
+    suspend fun saveWorkout(log: WorkoutLog, sets: List<SetRecord>): Long = dao.saveWorkoutTx(log, sets)
 
     suspend fun deleteLog(id: Long) = dao.deleteLog(id)
 

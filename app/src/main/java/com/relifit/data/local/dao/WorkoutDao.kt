@@ -38,6 +38,14 @@ interface WorkoutDao {
     @Insert
     suspend fun insertSets(sets: List<SetRecord>)
 
+    /** 事务化保存一次完整训练：日志 + 全部组原子提交（避免中途失败留下孤儿日志） */
+    @Transaction
+    suspend fun saveWorkoutTx(log: WorkoutLog, sets: List<SetRecord>): Long {
+        val logId = insertLog(log)
+        if (sets.isNotEmpty()) insertSets(sets.map { it.copy(logId = logId) })
+        return logId
+    }
+
     @Query("SELECT * FROM set_records WHERE logId = :logId ORDER BY setIndex")
     suspend fun getSets(logId: Long): List<SetRecord>
 
@@ -58,8 +66,8 @@ interface WorkoutDao {
     @Query("SELECT MAX(weightKg) FROM set_records WHERE exerciseId = :exerciseId AND completed = 1 AND logId IN (SELECT id FROM workout_logs WHERE date BETWEEN :start AND :end)")
     suspend fun maxWeightInRange(exerciseId: Long, start: Long, end: Long): Double?
 
-    /** 某动作按时间排序的每组记录（折线图数据点） */
-    @Query("SELECT * FROM set_records WHERE exerciseId = :exerciseId AND completed = 1 ORDER BY logId, setIndex")
+    /** 某动作按训练时间排序的每组记录（折线图数据点：按日志真实日期排序） */
+    @Query("SELECT s.* FROM set_records s JOIN workout_logs l ON l.id = s.logId WHERE s.exerciseId = :exerciseId AND s.completed = 1 ORDER BY l.date, s.logId, s.setIndex")
     fun observeSetsOfExercise(exerciseId: Long): Flow<List<SetRecord>>
 
     /** 某动作按时间区间内每组最高重量（折线图，带训练日期） */

@@ -7,12 +7,14 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.relifit.ReliFitApp
 import com.relifit.data.local.SeedData
 import com.relifit.data.repository.SettingsRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 设置 UI 状态
@@ -56,12 +58,15 @@ class SettingsViewModel(
         viewModelScope.launch { settingsRepo.setDefaultRestSec(sec.coerceIn(10, 600)) }
     }
 
-    /** 清除全部本地数据并重建种子 */
+    /** 清除全部本地数据（Room 表 + DataStore 设置）并重建种子 */
     fun clearAllData() {
         viewModelScope.launch {
-            app.database.clearAllTables()
-            SeedData.seedIfEmpty(app.database)
-            messages.emit("已清除全部数据并恢复默认内容")
+            withContext(Dispatchers.IO) {
+                app.database.clearAllTables()
+                SeedData.seedIfEmpty(app.database)
+            }
+            settingsRepo.clear()
+            messages.emit("已清除全部本地数据并恢复默认内容")
         }
     }
 

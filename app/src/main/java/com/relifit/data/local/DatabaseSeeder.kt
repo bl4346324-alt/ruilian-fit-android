@@ -1,24 +1,28 @@
 package com.relifit.data.local
 
+import androidx.room.withTransaction
 import com.relifit.data.local.entity.Exercise
 import com.relifit.data.local.entity.ExerciseEntry
 import com.relifit.data.local.entity.WorkoutDay
 import com.relifit.data.local.entity.WorkoutPlan
 
 /**
- * 种子数据：首次启动写入 25 个动作（六大肌群，与 Demo 一致）+ 4 套内置模板
+ * 种子数据：首次启动写入 47 个动作（六大肌群 + 有氧/恢复）+ 7 套内置模板
  * 由 ReliFitApp 启动时调用，避免在 Room 回调中嵌套查询
  */
 object SeedData {
 
+    /** 整体在事务内执行；动作表/计划表分别判断（半初始化可被下次补齐） */
     suspend fun seedIfEmpty(db: AppDatabase) {
-        if (db.exerciseDao().count() > 0L) return   // 已有数据则跳过
-        // 1) 插入全部种子动作
-        db.exerciseDao().insertAll(seedExercises())
-        // 2) 查库建立 名称->id 映射，供模板动作条目引用
-        val exMap = db.exerciseDao().getAll().associate { it.name to it.id }
-        // 3) 写入 4 套内置模板
-        seedPlans(db, exMap)
+        db.withTransaction {
+            if (db.exerciseDao().count() == 0) {
+                db.exerciseDao().insertAll(seedExercises())
+            }
+            val exMap = db.exerciseDao().getAll().associate { it.name to it.id }
+            if (db.planDao().count() == 0L) {
+                seedPlans(db, exMap)
+            }
+        }
     }
 
     // ==================== 动作库种子（Demo 同款 25 个） ====================

@@ -41,13 +41,13 @@ class BodyViewModel(private val repo: BodyRepository) : ViewModel() {
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BodyUiState())
 
-    /** 记录新数据（空字段沿用上一条） */
+    /** 记录新数据（空字段沿用上一条；日期归一化到当日零点，同日记录自动覆盖） */
     fun addMetric(weightKg: Double?, heightCm: Double?, dailyActivity: Double?) {
         viewModelScope.launch {
             val prev = repo.getLatest()
             repo.insert(
                 BodyMetric(
-                    date = System.currentTimeMillis(),
+                    date = TimeUtils.startOfDay(System.currentTimeMillis()),
                     weightKg = weightKg ?: prev?.weightKg,
                     heightCm = heightCm ?: prev?.heightCm,
                     dailyActivity = dailyActivity ?: prev?.dailyActivity

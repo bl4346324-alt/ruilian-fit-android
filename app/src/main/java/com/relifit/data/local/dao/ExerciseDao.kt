@@ -21,12 +21,15 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercises WHERE :group = '全部' OR muscleGroup = :group ORDER BY id")
     fun observeByGroup(group: String): Flow<List<Exercise>>
 
-    /** 搜索：按名称 / 英文名 / 肌群 / 器械 模糊匹配 */
-    @Query("SELECT * FROM exercises WHERE name LIKE '%' || :kw || '%' OR nameEn LIKE '%' || :kw || '%' OR muscleGroup LIKE '%' || :kw || '%' OR equipment LIKE '%' || :kw || '%' ORDER BY id")
+    /** 搜索：按名称 / 英文名 / 肌群 / 器械 模糊匹配（kw 已转义 % _ 通配符） */
+    @Query("SELECT * FROM exercises WHERE name LIKE '%' || :kw || '%' ESCAPE '\\' OR nameEn LIKE '%' || :kw || '%' ESCAPE '\\' OR muscleGroup LIKE '%' || :kw || '%' ESCAPE '\\' OR equipment LIKE '%' || :kw || '%' ESCAPE '\\' ORDER BY id")
     fun search(kw: String): Flow<List<Exercise>>
 
     @Query("SELECT * FROM exercises WHERE id = :id")
     suspend fun getById(id: Long): Exercise?
+
+    @Query("SELECT * FROM exercises WHERE id = :id")
+    fun observeById(id: Long): Flow<Exercise?>
 
     @Query("SELECT * FROM exercises ORDER BY id")
     suspend fun getAll(): List<Exercise>

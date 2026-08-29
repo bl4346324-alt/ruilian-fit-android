@@ -13,9 +13,14 @@ class ExerciseRepository(private val dao: ExerciseDao) {
 
     fun observeByGroup(group: String): Flow<List<Exercise>> = dao.observeByGroup(group)
 
-    fun search(kw: String): Flow<List<Exercise>> = dao.search(kw.trim())
+    /** 搜索（转义 LIKE 通配符 % _ \，避免用户输入被当通配符匹配全部） */
+    fun search(kw: String): Flow<List<Exercise>> =
+        dao.search(kw.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_"))
 
     suspend fun getById(id: Long): Exercise? = dao.getById(id)
+
+    /** 观察单个动作（详情页随数据库变化自动刷新） */
+    fun observeById(id: Long): Flow<Exercise?> = dao.observeById(id)
 
     suspend fun getAll(): List<Exercise> = dao.getAll()
 

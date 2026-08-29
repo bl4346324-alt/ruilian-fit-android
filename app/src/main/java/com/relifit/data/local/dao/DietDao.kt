@@ -18,7 +18,8 @@ import kotlinx.coroutines.flow.Flow
 interface DietDao {
 
     // ===== 餐次 =====
-    @Insert
+    /** 幂等插入：同日同餐次已存在则忽略（配合 (date, mealType) 唯一约束） */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertMeal(meal: Meal): Long
 
     @Query("DELETE FROM meals WHERE id = :id")
