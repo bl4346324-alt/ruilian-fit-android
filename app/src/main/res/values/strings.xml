@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">锐炼Fit</string>
+    <!-- 六大肌群 -->
+    <string name="group_chest">胸</string>
+    <string name="group_back">背</string>
+    <string name="group_shoulder">肩</string>
+    <string name="group_leg">腿</string>
+    <string name="group_arm">手臂</string>
+    <string name="group_core">核心</string>
+    <string name="group_all">全部</string>
+    <!-- 器械类型 -->
+    <string name="equip_barbell">杠铃</string>
+    <string name="equip_dumbbell">哑铃</string>
+    <string name="equip_machine">器械</string>
+    <string name="equip_bodyweight">自重</string>
+    <!-- 难度 -->
+    <string name="diff_beginner">入门</string>
+    <string name="diff_intermediate">中级</string>
+    <string name="diff_advanced">进阶</string>
+    <!-- 底部导航 5 个 Tab（与 Demo 一致） -->
+    <string name="tab_home">首页</string>
+    <string name="tab_library">动作库</string>
+    <string name="tab_logs">训练记录</string>
+    <string name="tab_diet">饮食记录</string>
+    <string name="tab_stats">数据统计</string>
+</resources>
