@@ -125,6 +125,7 @@ fun AppNavGraph(darkTheme: Boolean, onToggleTheme: () -> Unit) {
             composable(Routes.HOME) {
                 HomeScreen(
                     onOpenPlan = { navController.navigate(Routes.plan(it)) },
+                    onOpenPlans = { navController.navigate(Routes.PLANS) },
                     onStartWorkout = { planId, dayId -> navController.navigate(Routes.workout(planId, dayId, null)) },
                     onOpenBody = { navController.navigate(Routes.BODY) },
                     onOpenSettings = { navController.navigate(Routes.SETTINGS) },

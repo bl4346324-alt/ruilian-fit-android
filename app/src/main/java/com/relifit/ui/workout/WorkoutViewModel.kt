@@ -321,6 +321,16 @@ class WorkoutViewModel(
                     )
                 }
             }
+            val logTitle = if (sessionDayId != null) {
+                val day = planRepo.getDay(sessionDayId)
+                val plan = if (sessionPlanId != null) planRepo.getPlan(sessionPlanId) else null
+                if (plan != null && day != null) "${plan.name} · ${day.name}"
+                else day?.name ?: "计划训练"
+            } else {
+                val firstEx = s.exercises.firstOrNull()?.name
+                if (firstEx != null) "自由训练 · $firstEx" else "自由训练"
+            }
+
             workoutRepo.saveWorkout(
                 log = WorkoutLog(
                     // 日期归一化到当日零点：与统计页按天分组的 key 对齐（修复频率图恒为 0）
@@ -330,6 +340,7 @@ class WorkoutViewModel(
                     durationMin = durationMin,
                     totalVolumeKg = Math.round(volume * 10) / 10.0,
                     totalSets = sets.size,
+                    note = logTitle,
                     status = "完成"
                 ),
                 sets = sets

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,13 +25,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -58,6 +62,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.relifit.util.TimeUtils
 import com.relifit.util.UnitConverter
+import com.relifit.ui.components.AppChip
 import com.relifit.ui.components.softCardShadow
 import kotlinx.coroutines.flow.collectLatest
 
@@ -409,42 +414,109 @@ fun WorkoutScreen(
         )
     }
 
-    // ===== 添加动作选择器（自由训练/临时加动作） =====
+    // ===== 添加动作选择器（自由训练/临时加动作，支持搜索与肌群筛选） =====
     if (showAddPicker) {
         val all = viewModel.allExercises.collectAsStateWithLifecycle().value
+        var pickerQuery by remember { mutableStateOf("") }
+        var pickerGroup by remember { mutableStateOf("全部") }
+        val muscleGroups = remember { listOf("全部", "胸", "背", "肩", "腿", "手臂", "核心", "有氧") }
+
+        val filtered = remember(all, pickerQuery, pickerGroup) {
+            all.filter { ex ->
+                val matchGroup = if (pickerGroup == "全部") true else ex.muscleGroup.contains(pickerGroup)
+                val matchQuery = if (pickerQuery.isBlank()) true else ex.name.contains(pickerQuery.trim(), ignoreCase = true)
+                matchGroup && matchQuery
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { showAddPicker = false },
-            title = { Text("添加动作") },
+            title = { Text("添加动作", fontWeight = FontWeight.Bold) },
             text = {
-                LazyColumn(modifier = Modifier.height(400.dp)) {
-                    items(all, key = { it.id }) { ex ->
-                        Row(
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = pickerQuery,
+                        onValueChange = { pickerQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("搜索动作名称...") },
+                        leadingIcon = { Icon(Icons.Filled.Search, null, modifier = Modifier.size(20.dp)) },
+                        trailingIcon = {
+                            if (pickerQuery.isNotEmpty()) {
+                                IconButton(onClick = { pickerQuery = "" }) {
+                                    Icon(Icons.Filled.Close, null, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(muscleGroups) { g ->
+                            AppChip(
+                                text = g,
+                                selected = pickerGroup == g,
+                                onClick = { pickerGroup = g }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    if (filtered.isEmpty()) {
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    viewModel.addExercise(ex.id)
-                                    showAddPicker = false
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .height(260.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                ex.name,
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                "${ex.muscleGroup} · ${ex.equipment}",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Text("未找到相关动作", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.height(300.dp)) {
+                            items(filtered, key = { it.id }) { ex ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.addExercise(ex.id)
+                                            showAddPicker = false
+                                        }
+                                        .padding(vertical = 12.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            ex.name,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "${ex.muscleGroup} · ${ex.equipment}",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.Filled.Add,
+                                        contentDescription = "添加",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                            }
                         }
                     }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showAddPicker = false }) { Text("取消") }
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showAddPicker = false }) { Text("关闭") }
             }
         )
     }

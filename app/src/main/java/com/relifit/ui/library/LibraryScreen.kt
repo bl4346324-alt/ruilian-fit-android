@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -50,8 +52,8 @@ import com.relifit.ui.components.ScreenTopBar
 import com.relifit.ui.components.softCardShadow
 import kotlinx.coroutines.flow.collectLatest
 
-/** 肌群标签顺序（Demo：胸默认选中，全部放最后；含新增的有氧/恢复类） */
-private val groups = listOf("胸", "背", "肩", "腿", "手臂", "核心", "有氧", "恢复", "全部")
+/** 肌群标签顺序（含收藏与有氧/恢复类） */
+private val groups = listOf("胸", "背", "肩", "腿", "手臂", "核心", "有氧", "恢复", "收藏", "全部")
 
 /**
  * 动作库页（Demo 布局）：搜索框 + 横向肌群标签 + 动作卡片列表
@@ -140,26 +142,48 @@ fun LibraryScreen(
             Spacer(Modifier.height(14.dp))
 
             // 动作列表
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(state.exercises, key = { it.id }) { ex ->
-                    ExerciseRow(
-                        ex = ex,
-                        onClick = { onOpenExercise(ex.id) },
-                        onToggleOffline = { viewModel.toggleOffline(ex.id) }
+            if (state.exercises.isEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Filled.FitnessCenter, null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        if (state.group == "收藏") "暂无收藏的动作，可在详情页或卡片上点击星标添加"
+                        else "未找到匹配动作",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                item { Spacer(Modifier.height(12.dp)) }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(state.exercises, key = { it.id }) { ex ->
+                        ExerciseRow(
+                            ex = ex,
+                            onClick = { onOpenExercise(ex.id) },
+                            onToggleOffline = { viewModel.toggleOffline(ex.id) },
+                            onToggleFavorite = { viewModel.toggleFavorite(ex.id) }
+                        )
+                    }
+                    item { Spacer(Modifier.height(12.dp)) }
+                }
             }
         }
     }
 }
 
-/** 动作卡片行（Demo ex-card：缩略图 + 名称 + 肌群·器械 + 难度 chip + 离线云图标 + 箭头） */
+/** 动作卡片行（缩略图 + 名称 + 肌群·器械 + 难度 chip + 收藏星标 + 离线云图标 + 箭头） */
 @Composable
 private fun ExerciseRow(
     ex: Exercise,
     onClick: () -> Unit,
-    onToggleOffline: () -> Unit
+    onToggleOffline: () -> Unit,
+    onToggleFavorite: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -208,6 +232,17 @@ private fun ExerciseRow(
                 )
             }
         }
+        // 收藏状态切换
+        Icon(
+            imageVector = if (ex.isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
+            contentDescription = "收藏",
+            tint = if (ex.isFavorite) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(24.dp)
+                .clickable(onClick = onToggleFavorite)
+        )
+        Spacer(Modifier.width(8.dp))
         // 离线状态切换（Demo 云朵图标，点击下载/取消）
         Icon(
             imageVector = if (ex.offlineAvailable) Icons.Filled.CloudDone else Icons.Filled.CloudOff,
@@ -215,7 +250,7 @@ private fun ExerciseRow(
             tint = if (ex.offlineAvailable) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
-                .size(26.dp)
+                .size(24.dp)
                 .clickable(onClick = onToggleOffline)
         )
         Spacer(Modifier.width(8.dp))

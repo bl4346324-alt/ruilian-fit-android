@@ -75,6 +75,8 @@ fun PlanDetailScreen(
     var confirmDeleteDay by remember { mutableStateOf<DayWithEntries?>(null) }
     var confirmRemoveEntry by remember { mutableStateOf<Long?>(null) }
 
+    var confirmDeletePlan by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         viewModel.messages.collectLatest { snackbar.showSnackbar(it) }
     }
@@ -106,10 +108,14 @@ fun PlanDetailScreen(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
-                // 复制（仅模板）；编辑（模板与自定义计划均支持）
+                // 复制（仅模板）；删除（仅自定义计划）；编辑（均支持）
                 if (state.plan?.isTemplate == true) {
                     IconButton(onClick = { viewModel.copyTemplate() }) {
                         Icon(Icons.Filled.ContentCopy, "复制计划", tint = MaterialTheme.colorScheme.primary)
+                    }
+                } else if (state.plan != null) {
+                    IconButton(onClick = { confirmDeletePlan = true }) {
+                        Icon(Icons.Filled.Delete, "删除计划", tint = MaterialTheme.colorScheme.error)
                     }
                 }
                 IconButton(onClick = { editMode = !editMode }) {
@@ -141,7 +147,7 @@ fun PlanDetailScreen(
                 }
                 Spacer(Modifier.height(14.dp))
 
-                // 周期环卡
+                // 周期环卡 + 设为当前计划按钮
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -156,14 +162,37 @@ fun PlanDetailScreen(
                         size = 84
                     )
                     Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(p.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Spacer(Modifier.height(6.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(p.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            if (state.isActive) {
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "当前执行",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(50))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
                         Text(
                             if (p.isTemplate) "内置模板 · 可复制为自定义计划" else "自定义计划 · 可编辑",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (!state.isActive) {
+                            Spacer(Modifier.height(6.dp))
+                            TextButton(
+                                onClick = { viewModel.setActivePlan() },
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Text("设为当前计划", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
                     }
                 }
 
@@ -316,6 +345,22 @@ fun PlanDetailScreen(
                 }) { Text("移除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmRemoveEntry = null }) { Text("取消") } }
+        )
+    }
+
+    // ===== 删除计划确认 =====
+    if (confirmDeletePlan) {
+        AlertDialog(
+            onDismissRequest = { confirmDeletePlan = false },
+            title = { Text("删除训练计划？") },
+            text = { Text("将删除「${state.plan?.name}」及其全部训练日与动作配置，此操作不可撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDeletePlan = false
+                    viewModel.deletePlan(onBack)
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeletePlan = false }) { Text("取消") } }
         )
     }
 }

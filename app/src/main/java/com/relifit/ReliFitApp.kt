@@ -34,6 +34,9 @@ class ReliFitApp : Application() {
     val bodyRepository: BodyRepository by lazy { BodyRepository(database.bodyMetricDao()) }
     val dietRepository: DietRepository by lazy { DietRepository(database.dietDao()) }
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
+    val backupManager: com.relifit.data.backup.BackupManager by lazy {
+        com.relifit.data.backup.BackupManager(database, settingsRepository)
+    }
 
     override fun onCreate() {
         super.onCreate()

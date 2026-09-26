@@ -12,6 +12,7 @@ import com.relifit.data.local.entity.EntryWithExercise
 import com.relifit.data.local.entity.WorkoutPlan
 import com.relifit.data.repository.PlanRepository
 import com.relifit.data.repository.WorkoutRepository
+import com.relifit.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,17 +28,19 @@ data class PlanUiState(
     val plan: WorkoutPlan? = null,
     val days: List<DayWithEntries> = emptyList(),
     val exerciseNames: Map<Long, String> = emptyMap(),
-    val cycleWeek: Int = 0
+    val cycleWeek: Int = 0,
+    val isActive: Boolean = false
 )
 
 /**
  * 计划详情 ViewModel（PRD 训练计划模块 P0）
- * 模板复制、训练日管理、动作条目增删改、开始训练
+ * 模板复制、训练日管理、动作条目增删改、开始训练、设为当前计划、删除计划
  */
 class PlanViewModel(
     private val planRepo: PlanRepository,
     private val workoutRepo: WorkoutRepository,
     private val exerciseRepo: com.relifit.data.repository.ExerciseRepository,
+    private val settingsRepo: SettingsRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -48,10 +51,9 @@ class PlanViewModel(
         planRepo.observePlan(planId),
         planRepo.observeDaysWithEntries(planId),
         exerciseRepo.observeAll(),
-        workoutRepo.observeLogsWithSets()
-    ) { plan, days, exercises, logs ->
-        // 周期周数：只统计【本计划】的训练日志（自由训练/其他计划不计入），
-        // 以首次训练所在周为第 1 周，未训练显示 0；超过周期自动回绕新一轮
+        workoutRepo.observeLogsWithSets(),
+        settingsRepo.activePlanId
+    ) { plan, days, exercises, logs, activeId ->
         val planLogs = logs.filter { it.log.planId == planId }
         val cycleWeek = if (planLogs.isEmpty()) 0
         else {
@@ -60,13 +62,35 @@ class PlanViewModel(
             val weekNo = ((nowWeek - firstWeek) / (7 * 24 * 3600 * 1000L)).toInt() + 1
             ((weekNo - 1) % (plan?.cycleWeeks ?: 4).coerceAtLeast(1)) + 1
         }
+        val isActive = if (activeId != null) activeId == planId else false
         PlanUiState(
             plan = plan,
             days = days,
             exerciseNames = exercises.associate { it.id to it.name },
-            cycleWeek = cycleWeek
+            cycleWeek = cycleWeek,
+            isActive = isActive
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PlanUiState())
+
+    /** 设为当前执行计划（首页展示该计划） */
+    fun setActivePlan() {
+        viewModelScope.launch {
+            settingsRepo.setActivePlanId(planId)
+            messages.emit("已设为当前计划，首页已同步更新")
+        }
+    }
+
+    /** 删除自定义计划 */
+    fun deletePlan(onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            val p = planRepo.getPlan(planId) ?: return@launch
+            if (!p.isTemplate) {
+                planRepo.deletePlan(planId)
+                messages.emit("已删除计划「${p.name}」")
+                onSuccess()
+            }
+        }
+    }
 
     /** 复制模板生成自定义计划 */
     fun copyTemplate() {
@@ -120,7 +144,7 @@ class PlanViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = ReliFitApp.from(this[androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY]!!)
-                PlanViewModel(app.planRepository, app.workoutRepository, app.exerciseRepository, createSavedStateHandle())
+                PlanViewModel(app.planRepository, app.workoutRepository, app.exerciseRepository, app.settingsRepository, createSavedStateHandle())
             }
         }
     }

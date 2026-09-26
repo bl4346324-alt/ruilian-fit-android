@@ -70,6 +70,23 @@ class SettingsViewModel(
         }
     }
 
+    /** 导出备份 JSON 字符串 */
+    suspend fun exportBackup(): String {
+        return app.backupManager.exportBackupJson()
+    }
+
+    /** 导入备份 JSON 字符串并覆盖恢复 */
+    fun importBackup(jsonString: String) {
+        viewModelScope.launch {
+            val res = app.backupManager.importBackupJson(jsonString)
+            if (res.isSuccess) {
+                messages.emit(res.getOrNull() ?: "备份恢复成功")
+            } else {
+                messages.emit("恢复失败: ${res.exceptionOrNull()?.message ?: "文件解析错误"}")
+            }
+        }
+    }
+
     companion object {
         val Factory = viewModelFactory {
             initializer {

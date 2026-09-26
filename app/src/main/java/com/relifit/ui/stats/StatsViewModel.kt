@@ -32,6 +32,8 @@ data class StatsUiState(
     val freqValues: List<Float> = emptyList(),
     val freqSub: String = "",
     // 重量进步折线图
+    val selectedExerciseId: Long? = null,
+    val availableExercises: List<Pair<Long, String>> = emptyList(),
     val weightTitle: String = "杠铃深蹲 · 最大重量",
     val weightLabels: List<String> = emptyList(),
     val weightValues: List<Float> = emptyList(),
@@ -49,7 +51,7 @@ data class StatsUiState(
 
 /**
  * 数据统计 ViewModel（PRD 数据统计模块核心）
- * 周/月切换：训练频率柱状图、重量进步折线图（PR 标记）、肌群分布、近 7 天热量
+ * 周/月切换：训练频率柱状图、重量进步折线图（PR 标记、动作自由切换）、肌群分布、近 7 天热量（精准星期对齐）
  */
 class StatsViewModel(
     private val workoutRepo: WorkoutRepository,
@@ -63,6 +65,8 @@ class StatsViewModel(
     private val _period = MutableStateFlow("周")
     val period: StateFlow<String> = _period.asStateFlow()
 
+    private val _selectedExerciseId = MutableStateFlow<Long?>(null)
+
     init {
         viewModelScope.launch {
             _period.collect { load(it) }
@@ -70,6 +74,11 @@ class StatsViewModel(
     }
 
     fun setPeriod(p: String) { _period.value = p }
+
+    fun selectExercise(id: Long) {
+        _selectedExerciseId.value = id
+        viewModelScope.launch { load(_period.value) }
+    }
 
     private suspend fun load(period: String) {
         _state.value = _state.value.copy(period = period, loading = true)
@@ -122,8 +131,10 @@ class StatsViewModel(
             }
         }
 
-        // ===== 重量进步折线图（默认深蹲，识别 PR） =====
-        val prExerciseId = findExerciseId("杠铃深蹲") ?: exerciseRepo.getAll().firstOrNull()?.id
+        // ===== 重量进步折线图（支持动作选择，默认深蹲，识别 PR） =====
+        val allEx = exerciseRepo.getAll()
+        val available = allEx.map { it.id to it.name }
+        val prExerciseId = _selectedExerciseId.value ?: findExerciseId("杠铃深蹲") ?: allEx.firstOrNull()?.id
         val weightTitle = exerciseName(prExerciseId)
         val maxRows = if (prExerciseId != null) workoutRepo.maxWeightPerLog(prExerciseId, start, end) else emptyList()
         val weightValues = maxRows.map { it.w.toFloat() }
@@ -132,7 +143,7 @@ class StatsViewModel(
             val max = weightValues.maxOrNull() ?: 0f
             weightValues.indexOfLast { it >= max }
         } else -1
-        val weightSub = if (weightValues.isNotEmpty()) "${weightTitle} · 最大重量 ${formatW(weightValues.maxOrNull() ?: 0f)}kg" else "完成训练后生成曲线"
+        val weightSub = if (weightValues.isNotEmpty()) "${weightTitle} · 最大重量 ${formatW(weightValues.maxOrNull() ?: 0f)}kg" else "完成该动作训练后生成曲线"
 
         // ===== 肌群分布 =====
         val musRows = workoutRepo.muscleDistribution(start, end)
@@ -140,14 +151,13 @@ class StatsViewModel(
         val muscles = musRows.map { it.muscleGroup to (it.cnt.toFloat() / maxCnt) }
         val muscleTexts = musRows.map { "${it.cnt} 次" }
 
-        // ===== 近 7 天热量 =====
+        // ===== 近 7 天热量（动态精准对齐真实周几，第 7 根柱为今天） =====
         val todayStart = TimeUtils.startOfDay(now)
         val dietRows = dietRepo.dailyKcal(todayStart - 6 * day, todayStart + day - 1)
             .associate { it.dayStart to it.kcal }
-        val dietLabels = listOf("一", "二", "三", "四", "五", "六", "日")
-        val dietValues = (0..6).map { i ->
-            (dietRows[TimeUtils.startOfDay(todayStart - (6 - i) * day)] ?: 0.0).toFloat()
-        }
+        val dietDays = (0..6).map { i -> TimeUtils.startOfDay(todayStart - (6 - i) * day) }
+        val dietLabels = dietDays.map { weekdayShort(it) }
+        val dietValues = dietDays.map { dayTime -> (dietRows[dayTime] ?: 0.0).toFloat() }
 
         _state.value = StatsUiState(
             period = period,
@@ -161,6 +171,8 @@ class StatsViewModel(
             freqLabels = freqLabels,
             freqValues = freqValues,
             freqSub = "${if (period == "周") "本周" else "本月"} · $count 次",
+            selectedExerciseId = prExerciseId,
+            availableExercises = available,
             weightTitle = weightTitle,
             weightLabels = weightLabels,
             weightValues = weightValues,
@@ -184,6 +196,19 @@ class StatsViewModel(
     }
 
     private fun formatW(v: Float): String = if (v % 1f == 0f) v.toInt().toString() else v.toString()
+
+    private fun weekdayShort(millis: Long): String {
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+        return when (cal.get(java.util.Calendar.DAY_OF_WEEK)) {
+            java.util.Calendar.MONDAY -> "一"
+            java.util.Calendar.TUESDAY -> "二"
+            java.util.Calendar.WEDNESDAY -> "三"
+            java.util.Calendar.THURSDAY -> "四"
+            java.util.Calendar.FRIDAY -> "五"
+            java.util.Calendar.SATURDAY -> "六"
+            else -> "日"
+        }
+    }
 
     companion object {
         val Factory = viewModelFactory {

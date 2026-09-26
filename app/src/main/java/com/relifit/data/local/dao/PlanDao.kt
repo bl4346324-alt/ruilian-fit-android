@@ -21,6 +21,9 @@ interface PlanDao {
     @Query("SELECT * FROM plans ORDER BY isTemplate DESC, id")
     fun observeAllPlans(): Flow<List<WorkoutPlan>>
 
+    @Query("SELECT * FROM plans ORDER BY isTemplate DESC, id")
+    suspend fun getAllPlans(): List<WorkoutPlan>
+
     @Query("SELECT * FROM plans WHERE id = :id")
     fun observePlan(id: Long): Flow<WorkoutPlan?>
 

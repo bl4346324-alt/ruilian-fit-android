@@ -53,6 +53,7 @@ import com.relifit.ui.theme.LocalExtraColors
 @Composable
 fun HomeScreen(
     onOpenPlan: (Long) -> Unit,
+    onOpenPlans: () -> Unit,
     onStartWorkout: (Long?, Long?) -> Unit,
     onOpenBody: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -188,7 +189,7 @@ fun HomeScreen(
 
         // ===== 训练计划 =====
         item {
-            SectionTitle("训练计划", actionText = "全部") { state.plan?.let { onOpenPlan(it.id) } }
+            SectionTitle("训练计划", actionText = "全部", onAction = onOpenPlans)
             state.plan?.let { plan ->
                 AppCard(onClick = { onOpenPlan(plan.id) }) {
                     Row(

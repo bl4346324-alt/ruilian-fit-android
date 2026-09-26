@@ -13,21 +13,30 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +64,7 @@ fun StatsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val period by viewModel.period.collectAsStateWithLifecycle()
+    var showExercisePicker by remember { mutableStateOf(false) }
 
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { pad ->
         Column(
@@ -152,12 +162,29 @@ fun StatsScreen(
 
             Spacer(Modifier.height(18.dp))
 
-            // ===== 重量进步折线图 =====
+            // ===== 重量进步折线图（可自由切换动作） =====
             ChartCard(
                 title = "重量进步曲线",
                 subtitle = state.weightSub,
                 badge = if (state.prIndex >= 0) "新纪录" else null
             ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        text = "切换动作 ▶",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(50))
+                            .clickable { showExercisePicker = true }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
                 LineChart(
                     values = state.weightValues,
                     labels = state.weightLabels,
@@ -174,12 +201,12 @@ fun StatsScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            // ===== 近 7 天热量柱状图 =====
+            // ===== 近 7 天热量柱状图（精准对齐真实周几，今天高亮） =====
             ChartCard(title = "近 7 天热量", subtitle = state.dietSub) {
                 BarChart(
                     values = state.dietValues,
                     labels = state.dietLabels,
-                    highlightIndex = 6   // 今天（周日位）高亮
+                    highlightIndex = 6   // 第 7 根柱（今天）高亮
                 )
             }
 
@@ -196,6 +223,57 @@ fun StatsScreen(
 
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    if (showExercisePicker) {
+        AlertDialog(
+            onDismissRequest = { showExercisePicker = false },
+            title = { Text("选择统计动作", fontWeight = FontWeight.Bold) },
+            text = {
+                if (state.availableExercises.isEmpty()) {
+                    Text("暂无可统计动作", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().height(320.dp)) {
+                        items(state.availableExercises) { (id, name) ->
+                            val isSelected = id == state.selectedExerciseId
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.selectExercise(id)
+                                        showExercisePicker = false
+                                    }
+                                    .padding(vertical = 12.dp, horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = name,
+                                    fontSize = 15.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Filled.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showExercisePicker = false }) {
+                    Text("关闭")
+                }
+            }
+        )
     }
 }
 

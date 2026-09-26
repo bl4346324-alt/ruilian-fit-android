@@ -21,6 +21,10 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercises WHERE :group = '全部' OR muscleGroup = :group ORDER BY id")
     fun observeByGroup(group: String): Flow<List<Exercise>>
 
+    /** 观察已收藏动作 */
+    @Query("SELECT * FROM exercises WHERE isFavorite = 1 ORDER BY id")
+    fun observeFavorites(): Flow<List<Exercise>>
+
     /** 搜索：按名称 / 英文名 / 肌群 / 器械 模糊匹配（kw 已转义 % _ 通配符） */
     @Query("SELECT * FROM exercises WHERE name LIKE '%' || :kw || '%' ESCAPE '\\' OR nameEn LIKE '%' || :kw || '%' ESCAPE '\\' OR muscleGroup LIKE '%' || :kw || '%' ESCAPE '\\' OR equipment LIKE '%' || :kw || '%' ESCAPE '\\' ORDER BY id")
     fun search(kw: String): Flow<List<Exercise>>

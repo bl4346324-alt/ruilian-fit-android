@@ -47,21 +47,25 @@ data class HomeUiState(
 class HomeViewModel(
     private val planRepo: PlanRepository,
     private val workoutRepo: WorkoutRepository,
-    private val bodyRepo: BodyRepository
+    private val bodyRepo: BodyRepository,
+    private val settingsRepo: SettingsRepository
 ) : ViewModel() {
 
-    val uiState: StateFlow<HomeUiState> = planRepo.observeAllPlans()
-        .flatMapLatest { plans ->
-            val plan = plans.firstOrNull()
-            if (plan == null) flowOf(HomeUiState())
-            else planRepo.observeDaysWithEntries(plan.id).flatMapLatest { days ->
-                combine(
-                    workoutRepo.observeLogsWithSets(),
-                    bodyRepo.observeAll()
-                ) { logs, bodies -> build(plan, days, logs.map { it.log }, bodies) }
-            }
+    val uiState: StateFlow<HomeUiState> = combine(
+        planRepo.observeAllPlans(),
+        settingsRepo.activePlanId
+    ) { plans, activeId ->
+        val selected = plans.firstOrNull { it.id == activeId } ?: plans.firstOrNull()
+        selected to plans
+    }.flatMapLatest { (plan, _) ->
+        if (plan == null) flowOf(HomeUiState())
+        else planRepo.observeDaysWithEntries(plan.id).flatMapLatest { days ->
+            combine(
+                workoutRepo.observeLogsWithSets(),
+                bodyRepo.observeAll()
+            ) { logs, bodies -> build(plan, days, logs.map { it.log }, bodies) }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
 
     private fun build(
         plan: WorkoutPlan,
@@ -132,7 +136,7 @@ class HomeViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = ReliFitApp.from(this[androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY]!!)
-                HomeViewModel(app.planRepository, app.workoutRepository, app.bodyRepository)
+                HomeViewModel(app.planRepository, app.workoutRepository, app.bodyRepository, app.settingsRepository)
             }
         }
     }

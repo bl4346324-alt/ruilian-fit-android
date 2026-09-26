@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 /**
  * 动作详情 ViewModel：加载动作、收藏
@@ -29,6 +30,15 @@ class ExerciseDetailViewModel(
         repo.observeById(exerciseId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val messages = MutableSharedFlow<String>()
+
+    fun toggleFavorite() {
+        viewModelScope.launch {
+            val ex = exercise.value ?: return@launch
+            val newFav = !ex.isFavorite
+            repo.setFavorite(ex.id, newFav)
+            messages.emit(if (newFav) "已收藏「${ex.name}」" else "已取消收藏「${ex.name}」")
+        }
+    }
 
     companion object {
         val Factory = viewModelFactory {

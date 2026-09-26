@@ -21,7 +21,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -78,6 +81,7 @@ fun PlanListScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var showCreate by remember { mutableStateOf(false) }
+    var planToDelete by remember { mutableStateOf<WorkoutPlan?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collectLatest { snackbar.showSnackbar(it) }
@@ -164,14 +168,34 @@ fun PlanListScreen(
                     items(state.plans, key = { it.id }) { plan ->
                         PlanRow(
                             plan = plan,
+                            isActive = plan.id == state.activePlanId,
                             onClick = { onOpenPlan(plan.id) },
-                            onCopy = { if (plan.isTemplate) viewModel.copyTemplate(plan) }
+                            onSetActive = { viewModel.setActivePlan(plan.id) },
+                            onCopy = { if (plan.isTemplate) viewModel.copyTemplate(plan) },
+                            onDelete = { planToDelete = plan }
                         )
                     }
                     item { Spacer(Modifier.height(16.dp)) }
                 }
             }
         }
+    }
+
+    // ===== 删除计划确认弹窗 =====
+    val targetPlan = planToDelete
+    if (targetPlan != null) {
+        AlertDialog(
+            onDismissRequest = { planToDelete = null },
+            title = { Text("删除训练计划？") },
+            text = { Text("将删除自定义计划「${targetPlan.name}」及其训练日与动作，此操作不可撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deletePlan(targetPlan.id)
+                    planToDelete = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { planToDelete = null }) { Text("取消") } }
+        )
     }
 
     // ===== 新建计划弹窗 =====
@@ -213,9 +237,16 @@ fun PlanListScreen(
     }
 }
 
-/** 计划卡片行：名称 + 类型徽章 + 周期信息 + （模板）复制按钮 */
+/** 计划卡片行：名称 + 类型徽章 + 周期信息 + 设为当前 + （模板）复制按钮 / （自定义）删除按钮 */
 @Composable
-private fun PlanRow(plan: WorkoutPlan, onClick: () -> Unit, onCopy: () -> Unit) {
+private fun PlanRow(
+    plan: WorkoutPlan,
+    isActive: Boolean,
+    onClick: () -> Unit,
+    onSetActive: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -238,6 +269,18 @@ private fun PlanRow(plan: WorkoutPlan, onClick: () -> Unit, onCopy: () -> Unit) 
                         .background(typeColor(plan.type).copy(alpha = 0.14f), RoundedCornerShape(50))
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 )
+                if (isActive) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "当前执行",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(50))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
             Spacer(Modifier.height(4.dp))
             Text(
@@ -246,9 +289,23 @@ private fun PlanRow(plan: WorkoutPlan, onClick: () -> Unit, onCopy: () -> Unit) 
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (!isActive) {
+            IconButton(onClick = onSetActive) {
+                Icon(
+                    Icons.Filled.RadioButtonUnchecked,
+                    "设为当前计划",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
         if (plan.isTemplate) {
             IconButton(onClick = onCopy) {
                 Icon(Icons.Filled.ContentCopy, "复制模板", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            }
+        } else {
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.Delete, "删除计划", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
             }
         }
         Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))

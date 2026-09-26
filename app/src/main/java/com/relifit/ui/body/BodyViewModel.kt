@@ -15,31 +15,50 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * 身体数据 UI 状态（体重 / 身高 / 每日运动数量）
+ * 身体数据 UI 状态（体重 / 身高 / 每日运动数量 / BMI）
  */
 data class BodyUiState(
     val metrics: List<BodyMetric> = emptyList(),
     val latest: BodyMetric? = null,
     val weightLabels: List<String> = emptyList(),
-    val weightValues: List<Float> = emptyList()
+    val weightValues: List<Float> = emptyList(),
+    val bmi: Double? = null,
+    val bmiCategory: String = ""
 )
 
 /**
- * 身体数据 ViewModel：体重/身高/每日运动数量录入，体重历史趋势折线图
+ * 身体数据 ViewModel：体重/身高/每日运动数量录入，体重历史趋势折线图，BMI 自动核算
  */
 class BodyViewModel(private val repo: BodyRepository) : ViewModel() {
 
     val uiState: StateFlow<BodyUiState> = repo.observeAll()
         .map { list ->
             val asc = list.sortedBy { it.date }
+            val latest = list.firstOrNull()
+            val (bmiVal, bmiCat) = calculateBmi(latest?.weightKg, latest?.heightCm)
             BodyUiState(
                 metrics = list,
-                latest = list.firstOrNull(),
+                latest = latest,
                 weightLabels = asc.mapNotNull { m -> m.weightKg?.let { TimeUtils.formatShort(m.date) } },
-                weightValues = asc.mapNotNull { m -> m.weightKg?.toFloat() }
+                weightValues = asc.mapNotNull { m -> m.weightKg?.toFloat() },
+                bmi = bmiVal,
+                bmiCategory = bmiCat
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BodyUiState())
+
+    private fun calculateBmi(weightKg: Double?, heightCm: Double?): Pair<Double?, String> {
+        if (weightKg == null || heightCm == null || heightCm <= 0.0) return null to ""
+        val hM = heightCm / 100.0
+        val bmi = weightKg / (hM * hM)
+        val cat = when {
+            bmi < 18.5 -> "偏瘦"
+            bmi < 24.0 -> "正常"
+            bmi < 28.0 -> "超重"
+            else -> "肥胖"
+        }
+        return bmi to cat
+    }
 
     /** 记录新数据（空字段沿用上一条；日期归一化到当日零点，同日记录自动覆盖） */
     fun addMetric(weightKg: Double?, heightCm: Double?, dailyActivity: Double?) {

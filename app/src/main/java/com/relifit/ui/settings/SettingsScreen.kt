@@ -1,5 +1,8 @@
 package com.relifit.ui.settings
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +22,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,9 +39,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.relifit.ui.components.softCardShadow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 /**
  * 系统设置页（PRD 系统设置模块）
@@ -56,6 +65,51 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var showClearConfirm by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pendingImportJson by remember { mutableStateOf<String?>(null) }
+    var showImportConfirm by remember { mutableStateOf(false) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val json = viewModel.exportBackup()
+                    context.contentResolver.openOutputStream(uri)?.use { os ->
+                        os.write(json.toByteArray(Charsets.UTF_8))
+                    }
+                    snackbar.showSnackbar("数据备份已成功导出")
+                } catch (e: Exception) {
+                    snackbar.showSnackbar("导出失败: ${e.message}")
+                }
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val json = context.contentResolver.openInputStream(uri)?.use {
+                        it.bufferedReader().readText()
+                    }
+                    if (!json.isNullOrBlank()) {
+                        pendingImportJson = json
+                        showImportConfirm = true
+                    } else {
+                        snackbar.showSnackbar("无法读取备份文件内容")
+                    }
+                } catch (e: Exception) {
+                    snackbar.showSnackbar("读取备份文件失败: ${e.message}")
+                }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collectLatest { snackbar.showSnackbar(it) }
@@ -113,6 +167,69 @@ fun SettingsScreen(
                 }
             }
 
+            // ===== 数据备份与恢复 =====
+            SettingsSection("数据备份与恢复") {
+                Text(
+                    "支持将所有训练记录、计划、身体与饮食数据导出为 JSON 备份文件，换机或重装时可一键导入恢复。",
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                // 导出备份（保存文件）
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val timeStr = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.getDefault()).format(java.util.Date())
+                            exportLauncher.launch("relifit_backup_$timeStr.json")
+                        }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.FileDownload, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("导出数据备份文件 (.json)", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                }
+                // 分享备份文本
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            scope.launch {
+                                val json = viewModel.exportBackup()
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "锐炼Fit 数据备份")
+                                    putExtra(Intent.EXTRA_TEXT, json)
+                                }
+                                val shareIntent = Intent.createChooser(sendIntent, "分享或发送备份数据")
+                                context.startActivity(shareIntent)
+                            }
+                        }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Share, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("分享备份至其他应用", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                }
+                // 导入备份文件
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            importLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+                        }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.FileUpload, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("导入备份恢复数据", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                }
+            }
+
             // ===== 关于 =====
             SettingsSection("关于") {
                 SettingsRow("版本", value = "1.0.0")
@@ -155,6 +272,37 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirm = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showImportConfirm && pendingImportJson != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showImportConfirm = false
+                pendingImportJson = null
+            },
+            title = { Text("恢复数据备份？") },
+            text = { Text("导入备份将覆盖现有的本地数据（包括训练记录、自定义计划、身体与饮食记录）。确定继续吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val json = pendingImportJson
+                    showImportConfirm = false
+                    pendingImportJson = null
+                    if (json != null) {
+                        viewModel.importBackup(json)
+                    }
+                }) {
+                    Text("恢复", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showImportConfirm = false
+                    pendingImportJson = null
+                }) {
+                    Text("取消")
+                }
             }
         )
     }

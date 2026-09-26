@@ -13,6 +13,8 @@ class ExerciseRepository(private val dao: ExerciseDao) {
 
     fun observeByGroup(group: String): Flow<List<Exercise>> = dao.observeByGroup(group)
 
+    fun observeFavorites(): Flow<List<Exercise>> = dao.observeFavorites()
+
     /** 搜索（转义 LIKE 通配符 % _ \，避免用户输入被当通配符匹配全部） */
     fun search(kw: String): Flow<List<Exercise>> =
         dao.search(kw.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_"))

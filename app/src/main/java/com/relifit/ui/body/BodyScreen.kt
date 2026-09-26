@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.SquareFoot
@@ -23,6 +25,7 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +51,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.relifit.ui.components.ChartCard
 import com.relifit.ui.components.LineChart
 import com.relifit.ui.components.softCardShadow
+import com.relifit.util.TimeUtils
 import kotlinx.coroutines.launch
 
 /**
@@ -62,6 +66,7 @@ fun BodyScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showInput by remember { mutableStateOf(false) }
+    var recordToDelete by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -117,6 +122,57 @@ fun BodyScreen(
                 )
             }
 
+            // ===== BMI 指数卡片（基于身高体重自动核算） =====
+            if (state.bmi != null) {
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .softCardShadow(20)
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "BMI 指数",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            val badgeColor = when (state.bmiCategory) {
+                                "正常" -> MaterialTheme.colorScheme.primary
+                                "偏瘦" -> MaterialTheme.colorScheme.tertiary
+                                else -> MaterialTheme.colorScheme.error
+                            }
+                            Text(
+                                state.bmiCategory,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = badgeColor,
+                                modifier = Modifier
+                                    .background(badgeColor.copy(alpha = 0.12f), RoundedCornerShape(50))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "中国成人健康标准范围：18.5 ~ 23.9",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = String.format("%.1f", state.bmi),
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
             Spacer(Modifier.height(18.dp))
 
             // ===== 体重趋势 =====
@@ -141,6 +197,76 @@ fun BodyScreen(
                 Icon(Icons.Filled.Add, null)
                 Spacer(Modifier.padding(start = 6.dp))
                 Text("记录新数据", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // ===== 历史记录列表 =====
+            Text(
+                "历史记录",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(12.dp))
+
+            if (state.metrics.isEmpty()) {
+                Text(
+                    "暂无历史记录",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .softCardShadow(20)
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+                        .padding(16.dp)
+                ) {
+                    state.metrics.forEachIndexed { idx, m ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    TimeUtils.formatDate(m.date),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                val detailParts = mutableListOf<String>()
+                                m.weightKg?.let { detailParts.add("体重 ${String.format("%.1f", it)} kg") }
+                                m.heightCm?.let { detailParts.add("身高 ${String.format("%.1f", it)} cm") }
+                                m.dailyActivity?.let { detailParts.add("运动 ${formatNum(it)}") }
+                                Text(
+                                    if (detailParts.isEmpty()) "无具体数值" else detailParts.joinToString(" · "),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(
+                                onClick = { recordToDelete = m.id },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = "删除记录",
+                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        if (idx < state.metrics.size - 1) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                        }
+                    }
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -170,6 +296,26 @@ fun BodyScreen(
                 }) { Text("保存") }
             },
             dismissButton = { TextButton(onClick = { showInput = false }) { Text("取消") } }
+        )
+    }
+
+    recordToDelete?.let { id ->
+        AlertDialog(
+            onDismissRequest = { recordToDelete = null },
+            title = { Text("删除该条记录？") },
+            text = { Text("删除后将无法恢复该时间点的身体数据。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.delete(id)
+                    recordToDelete = null
+                    scope.launch { snackbar.showSnackbar("已删除身体数据记录") }
+                }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { recordToDelete = null }) { Text("取消") }
+            }
         )
     }
 }

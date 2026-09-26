@@ -47,7 +47,9 @@ class LibraryViewModel(private val repo: ExerciseRepository) : ViewModel() {
         combine(
             combine(group, query) { g, q -> g to q }
                 .flatMapLatest { (g, q) ->
-                    if (q.isBlank()) repo.observeByGroup(g) else repo.search(q)
+                    if (q.isNotBlank()) repo.search(q)
+                    else if (g == "收藏") repo.observeFavorites()
+                    else repo.observeByGroup(g)
                 },
             offlineCount,
             group
@@ -59,6 +61,16 @@ class LibraryViewModel(private val repo: ExerciseRepository) : ViewModel() {
     fun selectGroup(g: String) { group.value = g }
 
     fun onQueryChange(q: String) { query.value = q }
+
+    /** 收藏/取消收藏 */
+    fun toggleFavorite(id: Long) {
+        viewModelScope.launch {
+            val ex = repo.getById(id) ?: return@launch
+            val target = !ex.isFavorite
+            repo.setFavorite(id, target)
+            messages.emit(if (target) "已收藏：「${ex.name}」" else "已取消收藏：「${ex.name}」")
+        }
+    }
 
     /** 离线包状态提示（Demo 顶栏云朵图标） */
     fun showOfflineInfo() {

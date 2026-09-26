@@ -25,6 +25,9 @@ interface WorkoutDao {
     @Query("SELECT * FROM workout_logs ORDER BY date DESC")
     fun observeLogs(): Flow<List<WorkoutLog>>
 
+    @Query("SELECT * FROM workout_logs ORDER BY date DESC")
+    suspend fun getAllLogs(): List<WorkoutLog>
+
     /** 训练记录 + 全部组（可折叠卡片展开用） */
     @Transaction
     @Query("SELECT * FROM workout_logs ORDER BY date DESC")

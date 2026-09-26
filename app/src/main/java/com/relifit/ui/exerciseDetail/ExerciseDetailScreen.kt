@@ -92,7 +92,7 @@ fun ExerciseDetailScreen(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = { /* 收藏切换（P1） */ }) {
+                IconButton(onClick = { viewModel.toggleFavorite() }) {
                     Icon(
                         if (ex?.isFavorite == true) Icons.Filled.Star else Icons.Filled.StarBorder,
                         "收藏",

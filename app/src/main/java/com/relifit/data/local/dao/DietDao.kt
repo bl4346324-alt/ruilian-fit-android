@@ -41,6 +41,12 @@ interface DietDao {
     @Query("SELECT * FROM food_items WHERE id = :id")
     suspend fun getFoodById(id: Long): FoodItem?
 
+    @Query("SELECT * FROM food_items WHERE mealId = :mealId")
+    suspend fun getFoodsForMeal(mealId: Long): List<FoodItem>
+
+    @Query("SELECT * FROM meals ORDER BY date DESC")
+    suspend fun getAllMeals(): List<Meal>
+
     @Query("DELETE FROM food_items WHERE id = :id")
     suspend fun deleteFood(id: Long)
 
