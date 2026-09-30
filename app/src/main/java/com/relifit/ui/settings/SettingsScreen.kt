@@ -20,20 +20,30 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,6 +79,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var pendingImportJson by remember { mutableStateOf<String?>(null) }
     var showImportConfirm by remember { mutableStateOf(false) }
+    var showApiKeyDialog by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -84,6 +94,42 @@ fun SettingsScreen(
                     snackbar.showSnackbar("数据备份已成功导出")
                 } catch (e: Exception) {
                     snackbar.showSnackbar("导出失败: ${e.message}")
+                }
+            }
+        }
+    }
+
+    val exportWorkoutCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val csv = viewModel.exportWorkoutLogsCsv()
+                    context.contentResolver.openOutputStream(uri)?.use { os ->
+                        os.write(csv.toByteArray(Charsets.UTF_8))
+                    }
+                    snackbar.showSnackbar("训练记录 CSV 已成功导出")
+                } catch (e: Exception) {
+                    snackbar.showSnackbar("导出 CSV 失败: ${e.message}")
+                }
+            }
+        }
+    }
+
+    val exportBodyCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val csv = viewModel.exportBodyMetricsCsv()
+                    context.contentResolver.openOutputStream(uri)?.use { os ->
+                        os.write(csv.toByteArray(Charsets.UTF_8))
+                    }
+                    snackbar.showSnackbar("身体数据 CSV 已成功导出")
+                } catch (e: Exception) {
+                    snackbar.showSnackbar("导出 CSV 失败: ${e.message}")
                 }
             }
         }
@@ -167,6 +213,83 @@ fun SettingsScreen(
                 }
             }
 
+            // ===== DeepSeek AI 营养引擎 =====
+            SettingsSection("DeepSeek AI 营养助手") {
+                Text(
+                    "配置您的 DeepSeek API Key 后，在饮食记录中可一键让 AI 智能估算任意食物的热量与三大营养素，并支持 AI 一键生成严格控油控盐的高蛋白健身菜谱。",
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showApiKeyDialog = true }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("DeepSeek AI 引擎", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                        val statusText = when {
+                            state.isUsingCustomKey -> "自定义 Key（已启用）"
+                            state.isUsingBuiltInKey -> "系统内置服务 · 已就绪 (免配置)"
+                            else -> "未配置（点击设置）"
+                        }
+                        val statusColor = when {
+                            state.isUsingCustomKey -> MaterialTheme.colorScheme.primary
+                            state.isUsingBuiltInKey -> Color(0xFF43A047)
+                            else -> MaterialTheme.colorScheme.error
+                        }
+                        Text(
+                            statusText,
+                            fontSize = 12.sp,
+                            color = statusColor
+                        )
+                    }
+                    TextButton(onClick = { showApiKeyDialog = true }) {
+                        Text(if (state.isUsingCustomKey) "修改 Key" else "自定义 Key")
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("当前模型", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "${state.deepseekModel} (DeepSeek-V3)",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (state.isAiAvailable) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = { viewModel.testDeepSeekKey() },
+                            enabled = !state.isTestingKey
+                        ) {
+                            if (state.isTestingKey) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(6.dp))
+                                Text("测试连接中...")
+                            } else {
+                                Text("测试 AI 服务连接")
+                            }
+                        }
+                    }
+                }
+            }
+
             // ===== 数据备份与恢复 =====
             SettingsSection("数据备份与恢复") {
                 Text(
@@ -189,7 +312,43 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Filled.FileDownload, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text("导出数据备份文件 (.json)", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                    Text("导出数据全量备份 (.json)", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                }
+                // 导出训练记录 CSV 表格（Excel / WPS 可直接打开）
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val timeStr = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.getDefault()).format(java.util.Date())
+                            exportWorkoutCsvLauncher.launch("relifit_workouts_$timeStr.csv")
+                        }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.FileDownload, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("导出训练记录 (.csv)", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                        Text("明细日志与每组数据，可用 Excel / WPS / Notion 打开", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                // 导出身体数据 CSV 表格
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val timeStr = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.getDefault()).format(java.util.Date())
+                            exportBodyCsvLauncher.launch("relifit_body_$timeStr.csv")
+                        }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.FileDownload, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("导出身体数据 (.csv)", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                        Text("体重、身高与每日运动量历史记录", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 // 分享备份文本
                 Row(
@@ -232,7 +391,7 @@ fun SettingsScreen(
 
             // ===== 关于 =====
             SettingsSection("关于") {
-                SettingsRow("版本", value = "1.0.0")
+                SettingsRow("版本", value = com.relifit.BuildConfig.VERSION_NAME)
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "隐私说明：锐炼Fit 是纯本地工具应用，所有训练、身体与饮食数据仅保存在您的设备上（Room 数据库），无需注册登录，不联网、不上传任何数据，无广告、无社交社区。",
@@ -303,6 +462,86 @@ fun SettingsScreen(
                 }) {
                     Text("取消")
                 }
+            }
+        )
+    }
+
+    if (showApiKeyDialog) {
+        var tempKey by remember { mutableStateOf("") }
+        var showKey by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { showApiKeyDialog = false },
+            title = {
+                Text(
+                    if (state.isUsingCustomKey) "修改自定义 API Key" else "配置自定义 API Key",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val desc = if (state.isUsingBuiltInKey) {
+                        "本应用已内置默认系统 AI 引擎，食物营养估算与智能菜谱开箱即用。\n若您希望使用自己的 DeepSeek 账号额度，可在下方输入您的专属 Key 进行覆盖；无需配置可直接点击取消。"
+                    } else if (state.isUsingCustomKey) {
+                        "当前正在使用您自定义的 API Key。输入新 Key 可更新；若想恢复使用系统内置的默认服务，可点击下方「恢复内置服务」。"
+                    } else {
+                        "前往 platform.deepseek.com 获取您的 API Key。Key 仅保存在本地设备，用于请求食物营养分析与菜谱生成。"
+                    }
+                    Text(
+                        desc,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = tempKey,
+                        onValueChange = { tempKey = it.trim() },
+                        label = { Text("自定义 API Key (sk-...)") },
+                        placeholder = { Text("输入新的 sk-... 覆盖默认配置") },
+                        singleLine = true,
+                        visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showKey = !showKey }) {
+                                Icon(
+                                    imageVector = if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = if (showKey) "隐藏" else "显示",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (state.isUsingCustomKey) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    viewModel.clearCustomDeepSeekApiKey()
+                                    showApiKeyDialog = false
+                                }
+                            ) {
+                                Text("恢复使用系统内置服务", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (tempKey.isNotBlank()) {
+                            viewModel.setDeepSeekApiKey(tempKey)
+                        }
+                        showApiKeyDialog = false
+                    },
+                    enabled = tempKey.isNotBlank()
+                ) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showApiKeyDialog = false }) { Text("取消") }
             }
         )
     }

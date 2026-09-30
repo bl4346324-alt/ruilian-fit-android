@@ -27,5 +27,6 @@ data class SetRecord(
     val weightKg: Double,              // 实际重量（kg，0=自重）
     val reps: Int,                     // 实际次数
     val completed: Boolean = true,     // 是否完成（false=失败组）
-    val restSec: Int = 0               // 该组后休息秒数
+    val restSec: Int = 0,              // 该组后休息秒数
+    val setType: String = "NORMAL"     // 组类型：NORMAL(正式组), WARMUP(热身组), DROP(递减组), FAILURE(力竭组)
 )

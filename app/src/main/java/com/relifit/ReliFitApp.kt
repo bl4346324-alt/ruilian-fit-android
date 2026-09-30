@@ -33,13 +33,22 @@ class ReliFitApp : Application() {
     val workoutRepository: WorkoutRepository by lazy { WorkoutRepository(database.workoutDao()) }
     val bodyRepository: BodyRepository by lazy { BodyRepository(database.bodyMetricDao()) }
     val dietRepository: DietRepository by lazy { DietRepository(database.dietDao()) }
+    val recipeRepository: com.relifit.data.repository.RecipeRepository by lazy {
+        com.relifit.data.repository.RecipeRepository(database.recipeDao())
+    }
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
+    val deepSeekService: com.relifit.data.remote.DeepSeekService by lazy { com.relifit.data.remote.DeepSeekService() }
     val backupManager: com.relifit.data.backup.BackupManager by lazy {
         com.relifit.data.backup.BackupManager(database, settingsRepository)
     }
 
     override fun onCreate() {
         super.onCreate()
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            android.util.Log.e("ReliFitCrash", "FATAL CRASH on thread ${thread.name}: ${throwable.message}", throwable)
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
         // 首次启动写入种子数据（幂等：已有数据则跳过；失败记录日志不崩溃）
         appScope.launch {
             try {

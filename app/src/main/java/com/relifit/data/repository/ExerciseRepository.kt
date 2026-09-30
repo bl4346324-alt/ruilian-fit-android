@@ -30,4 +30,6 @@ class ExerciseRepository(private val dao: ExerciseDao) {
     suspend fun setOffline(id: Long, offline: Boolean) = dao.updateOffline(id, offline)
 
     suspend fun setFavorite(id: Long, fav: Boolean) = dao.updateFavorite(id, fav)
+
+    suspend fun addExercise(exercise: Exercise): Long = dao.insert(exercise)
 }

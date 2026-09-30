@@ -52,6 +52,38 @@ interface WorkoutDao {
     @Query("SELECT * FROM set_records WHERE logId = :logId ORDER BY setIndex")
     suspend fun getSets(logId: Long): List<SetRecord>
 
+    /** 查找某动作在最近一次训练记录中的每组数据（用于当前训练 Ghost 参照） */
+    @Query("""
+        SELECT s.* FROM set_records s
+        JOIN workout_logs l ON l.id = s.logId
+        WHERE s.exerciseId = :exerciseId AND s.completed = 1
+        AND l.date = (
+            SELECT MAX(l2.date) FROM set_records s2
+            JOIN workout_logs l2 ON l2.id = s2.logId
+            WHERE s2.exerciseId = :exerciseId AND s2.completed = 1
+        )
+        ORDER BY s.setIndex
+    """)
+    suspend fun getPreviousSetsForExercise(exerciseId: Long): List<SetRecord>
+
+    /** 某动作历史最大单次重量（全历史） */
+    @Query("SELECT MAX(weightKg) FROM set_records WHERE exerciseId = :exerciseId AND completed = 1")
+    suspend fun getMaxWeightHistorical(exerciseId: Long): Double?
+
+    /** 某动作累计完成组数 */
+    @Query("SELECT COUNT(*) FROM set_records WHERE exerciseId = :exerciseId AND completed = 1")
+    suspend fun countCompletedSetsForExercise(exerciseId: Long): Int
+
+    /** 某动作最近 N 次训练日志中的每组表现（用于动作详情页历史表现展示） */
+    @Query("""
+        SELECT s.* FROM set_records s
+        JOIN workout_logs l ON l.id = s.logId
+        WHERE s.exerciseId = :exerciseId AND s.completed = 1
+        ORDER BY l.date DESC, s.setIndex ASC
+        LIMIT :limit
+    """)
+    suspend fun getRecentSetsForExercise(exerciseId: Long, limit: Int = 20): List<SetRecord>
+
     // ===== 统计查询（周/月报表）=====
     @Query("SELECT COUNT(*) FROM workout_logs WHERE date BETWEEN :start AND :end")
     suspend fun countInRange(start: Long, end: Long): Int

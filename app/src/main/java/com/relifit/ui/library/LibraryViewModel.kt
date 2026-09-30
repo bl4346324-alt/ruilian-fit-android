@@ -48,6 +48,7 @@ class LibraryViewModel(private val repo: ExerciseRepository) : ViewModel() {
             combine(group, query) { g, q -> g to q }
                 .flatMapLatest { (g, q) ->
                     if (q.isNotBlank()) repo.search(q)
+                    else if (g == "全部") repo.observeAll()
                     else if (g == "收藏") repo.observeFavorites()
                     else repo.observeByGroup(g)
                 },
@@ -84,6 +85,29 @@ class LibraryViewModel(private val repo: ExerciseRepository) : ViewModel() {
             val target = !ex.offlineAvailable
             repo.setOffline(id, target)
             messages.emit(if (target) "已离线下载：「${ex.name}」" else "已取消离线：「${ex.name}」")
+        }
+    }
+
+    /** 创建自定义动作 */
+    fun createExercise(name: String, muscleGroup: String, equipment: String, difficulty: String, keyPoints: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            val ex = Exercise(
+                name = name.trim(),
+                nameEn = "",
+                muscleGroup = muscleGroup,
+                secondaryMuscles = "",
+                equipment = equipment,
+                difficulty = difficulty,
+                actionType = "复合",
+                keyPoints = keyPoints.ifBlank { "保持躯干稳定，感受目标肌肉主动发力与顶峰收缩" },
+                mistakes = "避免过度代偿与晃动借力",
+                breathTip = "发力呼气，离心还原则匀速吸气",
+                offlineAvailable = true,
+                isFavorite = false
+            )
+            repo.addExercise(ex)
+            messages.emit("已创建自定义动作：「${ex.name}」")
         }
     }
 

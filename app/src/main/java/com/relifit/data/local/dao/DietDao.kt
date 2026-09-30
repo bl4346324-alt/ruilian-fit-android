@@ -62,6 +62,16 @@ interface DietDao {
 
     @Query("SELECT * FROM diet_goal WHERE id = 1")
     suspend fun getGoal(): DietGoal?
+
+    // ===== 每日饮水 =====
+    @Query("SELECT * FROM water_records WHERE date = :date")
+    fun observeWater(date: Long): Flow<com.relifit.data.local.entity.WaterRecord?>
+
+    @Query("SELECT * FROM water_records WHERE date = :date")
+    suspend fun getWater(date: Long): com.relifit.data.local.entity.WaterRecord?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveWater(record: com.relifit.data.local.entity.WaterRecord)
 }
 
 /** 查询结果行：某日摄入热量 */

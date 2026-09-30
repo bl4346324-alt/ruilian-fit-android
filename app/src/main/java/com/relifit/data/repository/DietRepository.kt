@@ -41,7 +41,39 @@ class DietRepository(private val dao: DietDao) {
         if (new <= 0) dao.deleteFood(foodId) else dao.updateServings(foodId, new)
     }
 
+    /** 复制昨天同一餐次的所有食物到当前餐次 */
+    suspend fun copyYesterdayMeal(targetMealId: Long, mealType: String, currentDayStart: Long): Int {
+        val yesterday = currentDayStart - 24 * 3600 * 1000L
+        val yesterdayMeals = dao.observeDay(yesterday).first()
+        val sourceMeal = yesterdayMeals.firstOrNull { it.meal.mealType == mealType } ?: return 0
+        if (sourceMeal.items.isEmpty()) return 0
+        for (item in sourceMeal.items) {
+            dao.insertFood(item.copy(id = 0, mealId = targetMealId))
+        }
+        return sourceMeal.items.size
+    }
+
     suspend fun dailyKcal(start: Long, end: Long) = dao.dailyKcal(start, end)
 
     suspend fun saveGoal(goal: DietGoal) = dao.saveGoal(goal)
+
+    // ===== 每日饮水记录 =====
+    fun observeWater(date: Long): Flow<com.relifit.data.local.entity.WaterRecord?> = dao.observeWater(date)
+
+    suspend fun addWater(date: Long, deltaMl: Int): Int {
+        val current = dao.getWater(date) ?: com.relifit.data.local.entity.WaterRecord(date = date, amountMl = 0, goalMl = 2000)
+        val newAmount = (current.amountMl + deltaMl).coerceAtLeast(0)
+        dao.saveWater(current.copy(amountMl = newAmount))
+        return newAmount
+    }
+
+    suspend fun resetWater(date: Long) {
+        val current = dao.getWater(date) ?: com.relifit.data.local.entity.WaterRecord(date = date, amountMl = 0, goalMl = 2000)
+        dao.saveWater(current.copy(amountMl = 0))
+    }
+
+    suspend fun setWaterGoal(date: Long, goalMl: Int) {
+        val current = dao.getWater(date) ?: com.relifit.data.local.entity.WaterRecord(date = date, amountMl = 0, goalMl = 2000)
+        dao.saveWater(current.copy(goalMl = goalMl.coerceAtLeast(500)))
+    }
 }

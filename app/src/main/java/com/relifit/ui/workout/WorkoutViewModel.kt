@@ -34,7 +34,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
 
-/** 会话中的单个动作（含已记录组） */
+/** 会话中的单个动作（含已记录组 + 历史参照） */
 data class SessionExercise(
     val exerciseId: Long,
     val name: String,
@@ -42,11 +42,17 @@ data class SessionExercise(
     val targetReps: Int,
     val restSec: Int,
     val weightKg: Double,                       // 预填重量（目标重量或上次记录）
-    val sets: List<RecordedSet> = emptyList()
+    val sets: List<RecordedSet> = emptyList(),
+    val previousSets: List<RecordedSet> = emptyList(), // 上次该动作各组数据 (Ghost Data)
+    val historicalMaxWeight: Double = 0.0              // 历史最高单次重量 (用于判断 PR)
 )
 
 /** 已记录的一组 */
-data class RecordedSet(val weightKg: Double, val reps: Int)
+data class RecordedSet(
+    val weightKg: Double,
+    val reps: Int,
+    val setType: String = "NORMAL" // NORMAL(正式), WARMUP(热身), DROP(递减), FAILURE(力竭)
+)
 
 /** 训练进行页 UI 状态 */
 data class WorkoutUiState(
@@ -58,10 +64,20 @@ data class WorkoutUiState(
     val loading: Boolean = true,
     val unit: String = "kg",
     val inputWeightKg: Double = 0.0,    // 当前输入重量
-    val inputReps: Int = 10             // 当前输入次数
+    val inputReps: Int = 10,            // 当前输入次数
+    val inputSetType: String = "NORMAL", // 当前组类型：NORMAL, WARMUP, DROP, FAILURE
+    val estimated1RM: Double = 0.0,     // 动态计算的 1RM
+    val isNewPR: Boolean = false        // 当前组是否突破历史最高 PR
 ) {
     val current: SessionExercise? get() = exercises.getOrNull(currentIndex)
     val doneCount: Int get() = exercises.sumOf { it.sets.size }
+
+    /** 当前组匹配的上次完成成绩（Ghost Data） */
+    val previousPerformanceForCurrentSet: RecordedSet?
+        get() = current?.let { c ->
+            val setIdx = c.sets.size
+            c.previousSets.getOrNull(setIdx)
+        }
 }
 
 /**
@@ -127,19 +143,23 @@ class WorkoutViewModel(
 
     // ==================== 会话加载 ====================
 
-    /** 按计划训练日加载动作（目标组数/次数/休息 + 智能预填上次重量） */
+    /** 按计划训练日加载动作（目标组数/次数/休息 + 智能预填上次重量 + 历史数据 Ghost 参照） */
     private suspend fun loadFromDay(dayId: Long): List<SessionExercise> {
         val entries = planRepo.observeEntriesWithExercise(dayId).first()
         val list = mutableListOf<SessionExercise>()
         entries.forEach { e ->
             val ex = e.exercise ?: return@forEach
             val lastWeight = lastRecordedWeight(ex.id)
+            val prevSets = workoutRepo.getPreviousSetsForExercise(ex.id).map { RecordedSet(it.weightKg, it.reps, it.setType) }
+            val maxW = workoutRepo.getMaxWeightHistorical(ex.id) ?: 0.0
             list.add(
                 SessionExercise(
                     exerciseId = ex.id, name = ex.name,
                     targetSets = e.entry.targetSets, targetReps = e.entry.targetReps,
                     restSec = e.entry.restSec,
-                    weightKg = lastWeight ?: e.entry.targetWeight ?: 0.0
+                    weightKg = lastWeight ?: e.entry.targetWeight ?: 0.0,
+                    previousSets = prevSets,
+                    historicalMaxWeight = maxW
                 )
             )
         }
@@ -148,10 +168,14 @@ class WorkoutViewModel(
 
     private suspend fun buildSingle(exerciseId: Long): SessionExercise? {
         val ex = exerciseRepo.getById(exerciseId) ?: return null
+        val prevSets = workoutRepo.getPreviousSetsForExercise(ex.id).map { RecordedSet(it.weightKg, it.reps, it.setType) }
+        val maxW = workoutRepo.getMaxWeightHistorical(ex.id) ?: 0.0
         return SessionExercise(
             exerciseId = ex.id, name = ex.name,
             targetSets = 3, targetReps = 10, restSec = 90,
-            weightKg = lastRecordedWeight(ex.id) ?: 0.0
+            weightKg = lastRecordedWeight(ex.id) ?: 0.0,
+            previousSets = prevSets,
+            historicalMaxWeight = maxW
         )
     }
 
@@ -237,9 +261,27 @@ class WorkoutViewModel(
 
     private fun resetInputForCurrent() {
         val cur = _state.value.current
+        val w = cur?.weightKg ?: 0.0
+        val r = cur?.targetReps ?: 10
+        val e1rm = UnitConverter.estimate1RM(w, r)
+        val maxW = cur?.historicalMaxWeight ?: 0.0
         _state.value = _state.value.copy(
-            inputWeightKg = cur?.weightKg ?: 0.0,
-            inputReps = cur?.targetReps ?: 10
+            inputWeightKg = w,
+            inputReps = r,
+            inputSetType = "NORMAL",
+            estimated1RM = e1rm,
+            isNewPR = w > 0.0 && w > maxW
+        )
+    }
+
+    /** 切换组类型（NORMAL 正式组 / WARMUP 热身组 / DROP 递减组 / FAILURE 力竭组） */
+    fun changeSetType(type: String) {
+        val cur = _state.value.current
+        val maxW = cur?.historicalMaxWeight ?: 0.0
+        val isPR = type != "WARMUP" && _state.value.inputWeightKg > 0.0 && _state.value.inputWeightKg > maxW
+        _state.value = _state.value.copy(
+            inputSetType = type,
+            isNewPR = isPR
         )
     }
 
@@ -247,11 +289,52 @@ class WorkoutViewModel(
     fun changeWeight(deltaSign: Int) {
         val stepKg = UnitConverter.stepKgByUnit(_state.value.unit)
         val new = (_state.value.inputWeightKg + deltaSign * stepKg).coerceAtLeast(0.0)
-        _state.value = _state.value.copy(inputWeightKg = Math.round(new * 10) / 10.0)
+        val finalW = Math.round(new * 10) / 10.0
+        val e1rm = UnitConverter.estimate1RM(finalW, _state.value.inputReps)
+        val maxW = _state.value.current?.historicalMaxWeight ?: 0.0
+        val isPR = _state.value.inputSetType != "WARMUP" && finalW > 0.0 && finalW > maxW
+        _state.value = _state.value.copy(
+            inputWeightKg = finalW,
+            estimated1RM = e1rm,
+            isNewPR = isPR
+        )
+    }
+
+    /** 直接设置重量（如通过杠铃片计算器带入） */
+    fun setWeight(weight: Double) {
+        val finalW = (Math.round(weight.coerceAtLeast(0.0) * 10) / 10.0)
+        val e1rm = UnitConverter.estimate1RM(finalW, _state.value.inputReps)
+        val maxW = _state.value.current?.historicalMaxWeight ?: 0.0
+        val isPR = _state.value.inputSetType != "WARMUP" && finalW > 0.0 && finalW > maxW
+        _state.value = _state.value.copy(
+            inputWeightKg = finalW,
+            estimated1RM = e1rm,
+            isNewPR = isPR
+        )
     }
 
     fun changeReps(deltaSign: Int) {
-        _state.value = _state.value.copy(inputReps = (_state.value.inputReps + deltaSign).coerceAtLeast(1))
+        val newReps = (_state.value.inputReps + deltaSign).coerceAtLeast(1)
+        val e1rm = UnitConverter.estimate1RM(_state.value.inputWeightKg, newReps)
+        _state.value = _state.value.copy(
+            inputReps = newReps,
+            estimated1RM = e1rm
+        )
+    }
+
+    /** 一键带入上次成绩（Ghost Data 快速复制） */
+    fun applyPreviousPerformance() {
+        val prev = _state.value.previousPerformanceForCurrentSet ?: return
+        val e1rm = UnitConverter.estimate1RM(prev.weightKg, prev.reps)
+        val maxW = _state.value.current?.historicalMaxWeight ?: 0.0
+        val isPR = prev.setType != "WARMUP" && prev.weightKg > 0.0 && prev.weightKg > maxW
+        _state.value = _state.value.copy(
+            inputWeightKg = prev.weightKg,
+            inputReps = prev.reps,
+            inputSetType = prev.setType,
+            estimated1RM = e1rm,
+            isNewPR = isPR
+        )
     }
 
     /** 完成本组：记录并推进；全部完成进入结束状态 */
@@ -260,7 +343,7 @@ class WorkoutViewModel(
         val cur = s.current ?: return
         if (s.restActive) return   // 休息中不可记录
 
-        val newSets = cur.sets + RecordedSet(s.inputWeightKg, s.inputReps)
+        val newSets = cur.sets + RecordedSet(s.inputWeightKg, s.inputReps, s.inputSetType)
         val updatedExercises = s.exercises.toMutableList().apply {
             this[s.currentIndex] = cur.copy(sets = newSets)
         }
@@ -287,10 +370,14 @@ class WorkoutViewModel(
         viewModelScope.launch {
             val ex = exerciseRepo.getById(exerciseId) ?: return@launch
             val lastWeight = lastRecordedWeight(ex.id)
+            val prevSets = workoutRepo.getPreviousSetsForExercise(ex.id).map { RecordedSet(it.weightKg, it.reps) }
+            val maxW = workoutRepo.getMaxWeightHistorical(ex.id) ?: 0.0
             val sessionEx = SessionExercise(
                 exerciseId = ex.id, name = ex.name,
                 targetSets = 3, targetReps = 10, restSec = 90,
-                weightKg = lastWeight ?: 0.0
+                weightKg = lastWeight ?: 0.0,
+                previousSets = prevSets,
+                historicalMaxWeight = maxW
             )
             _state.value = _state.value.copy(exercises = _state.value.exercises + sessionEx)
             viewModelScope.launch { messages.emit("已添加动作：「${ex.name}」") }
@@ -309,18 +396,26 @@ class WorkoutViewModel(
         viewModelScope.launch {
             val durationMin = ceil(_clock.value / 60.0).toInt().coerceAtLeast(1)
             val sets = mutableListOf<SetRecord>()
-            var volume = 0.0
+            var totalVolume = 0.0
+            var workingVolume = 0.0
             s.exercises.forEach { ex ->
                 ex.sets.forEachIndexed { idx, rs ->
-                    volume += rs.weightKg * rs.reps
+                    val v = rs.weightKg * rs.reps
+                    totalVolume += v
+                    if (rs.setType != "WARMUP") {
+                        workingVolume += v
+                    }
                     sets.add(
                         SetRecord(
                             exerciseId = ex.exerciseId, setIndex = idx + 1,
-                            weightKg = rs.weightKg, reps = rs.reps, completed = true
+                            weightKg = rs.weightKg, reps = rs.reps, completed = true,
+                            setType = rs.setType
                         )
                     )
                 }
             }
+            val finalVolume = if (workingVolume > 0 || totalVolume == 0.0) workingVolume else totalVolume
+
             val logTitle = if (sessionDayId != null) {
                 val day = planRepo.getDay(sessionDayId)
                 val plan = if (sessionPlanId != null) planRepo.getPlan(sessionPlanId) else null
@@ -338,7 +433,7 @@ class WorkoutViewModel(
                     planId = sessionPlanId,
                     workoutDayId = sessionDayId,
                     durationMin = durationMin,
-                    totalVolumeKg = Math.round(volume * 10) / 10.0,
+                    totalVolumeKg = Math.round(finalVolume * 10) / 10.0,
                     totalSets = sets.size,
                     note = logTitle,
                     status = "完成"
@@ -348,11 +443,11 @@ class WorkoutViewModel(
             stopTotalTimer()
             val unit = s.unit
             val volText = if (unit == "lb") {
-                "${TimeUtils.thousands(volume * 2.20462)} lb"
+                "${TimeUtils.thousands(finalVolume * 2.20462)} lb"
             } else {
-                "${TimeUtils.thousands(volume)} kg"
+                "${TimeUtils.thousands(finalVolume)} kg"
             }
-            messages.emit("训练完成！已生成训练日志（${durationMin} 分钟 · $volText）")
+            messages.emit("训练完成！已生成训练日志（${durationMin} 分钟 · 有效容量 $volText）")
             onSaved.emit(Unit)
         }
     }

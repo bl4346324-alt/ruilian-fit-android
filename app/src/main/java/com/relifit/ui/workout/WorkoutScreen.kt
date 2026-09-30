@@ -25,8 +25,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -50,6 +52,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,6 +68,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.relifit.util.TimeUtils
 import com.relifit.util.UnitConverter
 import com.relifit.ui.components.AppChip
+import com.relifit.ui.components.PlateCalculatorDialog
 import com.relifit.ui.components.softCardShadow
 import kotlinx.coroutines.flow.collectLatest
 
@@ -84,8 +90,10 @@ fun WorkoutScreen(
     val clock by viewModel.clock.collectAsStateWithLifecycle()
     val restLeft by viewModel.restLeft.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    val haptic = LocalHapticFeedback.current
     var showExitConfirm by remember { mutableStateOf(false) }
     var showAddPicker by remember { mutableStateOf(false) }
+    var showPlateCalculator by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collectLatest { snackbar.showSnackbar(it) }
@@ -223,7 +231,13 @@ fun WorkoutScreen(
                             )
                             Spacer(Modifier.height(14.dp))
                             cur.sets.forEachIndexed { i, s ->
-                                SetRow(num = i + 1, weightText = UnitConverter.weightText(s.weightKg, state.unit), reps = s.reps, done = true)
+                                SetRow(
+                                    num = i + 1,
+                                    weightText = UnitConverter.weightText(s.weightKg, state.unit),
+                                    reps = s.reps,
+                                    done = true,
+                                    setType = s.setType
+                                )
                             }
                             // 当前/待做组
                             for (i in cur.sets.size until cur.targetSets) {
@@ -232,6 +246,7 @@ fun WorkoutScreen(
                                     weightText = UnitConverter.weightText(state.inputWeightKg, state.unit),
                                     reps = cur.targetReps,
                                     done = false,
+                                    setType = if (i == cur.sets.size) state.inputSetType else "NORMAL",
                                     isCurrent = i == cur.sets.size
                                 )
                             }
@@ -240,18 +255,125 @@ fun WorkoutScreen(
 
                     Spacer(Modifier.height(16.dp))
 
-                    // ===== 输入卡：重量 / 次数步进 + 完成本组 =====
+                    // ===== 输入卡：组类型 + 重量 / 次数步进 + 完成本组 =====
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(28.dp))
                             .padding(20.dp)
                     ) {
+                        // 上次表现参照 (Ghost Data)
+                        val ghost = state.previousPerformanceForCurrentSet
+                        if (ghost != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                        RoundedCornerShape(12.dp)
+                                    )
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "💡 上次该组: ${UnitConverter.weightText(ghost.weightKg, state.unit)} × ${ghost.reps}次",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = "一键带入",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .clickable { viewModel.applyPreviousPerformance() }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                            Spacer(Modifier.height(10.dp))
+                        }
+
+                        // 组类型选择器（正式 N / 热身 W / 递减 D / 力竭 F）
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            SetTypeChip(
+                                label = "正式组",
+                                tag = "N",
+                                selected = state.inputSetType == "NORMAL",
+                                activeColor = MaterialTheme.colorScheme.primary,
+                                onClick = { viewModel.changeSetType("NORMAL") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            SetTypeChip(
+                                label = "热身组",
+                                tag = "W",
+                                selected = state.inputSetType == "WARMUP",
+                                activeColor = Color(0xFFF57C00),
+                                onClick = { viewModel.changeSetType("WARMUP") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            SetTypeChip(
+                                label = "递减组",
+                                tag = "D",
+                                selected = state.inputSetType == "DROP",
+                                activeColor = Color(0xFF7B1FA2),
+                                onClick = { viewModel.changeSetType("DROP") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            SetTypeChip(
+                                label = "力竭组",
+                                tag = "F",
+                                selected = state.inputSetType == "FAILURE",
+                                activeColor = Color(0xFFD32F2F),
+                                onClick = { viewModel.changeSetType("FAILURE") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        if (state.inputSetType == "WARMUP") {
+                            Text(
+                                text = "ℹ️ 热身组不计入正式有效总容量，不触发新 PR 纪录",
+                                fontSize = 11.sp,
+                                color = Color(0xFFF57C00),
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+
                         StepperRow(
                             label = "重量",
                             value = UnitConverter.weightText(state.inputWeightKg, state.unit),
                             onMinus = { viewModel.changeWeight(-1) },
-                            onPlus = { viewModel.changeWeight(1) }
+                            onPlus = { viewModel.changeWeight(1) },
+                            extraAction = {
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                                        .clickable { showPlateCalculator = true }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.FitnessCenter,
+                                        contentDescription = "杠铃片配重计算",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(Modifier.width(3.dp))
+                                    Text(
+                                        "配重计算",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         )
                         StepperRow(
                             label = "次数",
@@ -259,9 +381,46 @@ fun WorkoutScreen(
                             onMinus = { viewModel.changeReps(-1) },
                             onPlus = { viewModel.changeReps(1) }
                         )
+
+                        // 1RM 预估 & PR 激励
+                        if (state.inputWeightKg > 0.0 && state.inputReps > 0) {
+                            Spacer(Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "估算 1RM: ${UnitConverter.weightText(state.estimated1RM, state.unit)}",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (state.isNewPR) {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                MaterialTheme.colorScheme.primaryContainer,
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            text = "🏆 突破个人记录(PR)!",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         Spacer(Modifier.height(16.dp))
                         Button(
-                            onClick = { if (state.finished) viewModel.finishAndSave() else viewModel.completeSet() },
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                if (state.finished) viewModel.finishAndSave() else viewModel.completeSet()
+                            },
                             enabled = !state.restActive,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
@@ -520,11 +679,41 @@ fun WorkoutScreen(
             }
         )
     }
+
+    if (showPlateCalculator) {
+        PlateCalculatorDialog(
+            initialWeight = state.inputWeightKg,
+            unit = state.unit,
+            onApply = { newWeight ->
+                viewModel.setWeight(newWeight)
+                showPlateCalculator = false
+            },
+            onDismiss = { showPlateCalculator = false }
+        )
+    }
 }
 
-/** 组行（Demo setrow：序号 + 重量 + 次数，done 显示勾选） */
+/** 组行（序号 + 重量 + 次数，支持正式/热身/递减/力竭组类型标识与勾选） */
 @Composable
-private fun SetRow(num: Int, weightText: String, reps: Int, done: Boolean, isCurrent: Boolean = false) {
+private fun SetRow(
+    num: Int,
+    weightText: String,
+    reps: Int,
+    done: Boolean,
+    setType: String = "NORMAL",
+    isCurrent: Boolean = false
+) {
+    val (typeBg, typeColor, typeText) = when (setType) {
+        "WARMUP" -> Triple(Color(0xFFFFF3E0), Color(0xFFF57C00), "W")
+        "DROP" -> Triple(Color(0xFFF3E5F5), Color(0xFF7B1FA2), "D")
+        "FAILURE" -> Triple(Color(0xFFFFEBEE), Color(0xFFD32F2F), "F")
+        else -> Triple(
+            if (done) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+            if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            "$num"
+        )
+    }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -549,33 +738,99 @@ private fun SetRow(num: Int, weightText: String, reps: Int, done: Boolean, isCur
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .background(
-                    if (done) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                    else MaterialTheme.colorScheme.surfaceContainerHigh,
-                    RoundedCornerShape(9.dp)
-                ),
+                .background(typeBg, RoundedCornerShape(9.dp)),
             contentAlignment = Alignment.Center
         ) {
-            if (done) {
+            if (setType == "NORMAL" && done) {
                 Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
             } else {
-                Text("$num", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = typeText,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = typeColor
+                )
             }
         }
         Spacer(Modifier.width(12.dp))
         Text(weightText, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+        if (setType != "NORMAL") {
+            val typeLabel = when (setType) {
+                "WARMUP" -> "热身"
+                "DROP" -> "递减"
+                "FAILURE" -> "力竭"
+                else -> ""
+            }
+            Text(
+                text = typeLabel,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = typeColor,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+        }
         Text("$reps 次", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SetTypeChip(
+    label: String,
+    tag: String,
+    selected: Boolean,
+    activeColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(38.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) activeColor.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant)
+            .then(
+                if (selected) Modifier.border(1.5.dp, activeColor, RoundedCornerShape(12.dp))
+                else Modifier
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = tag,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (selected) activeColor else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) activeColor else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
 /** 步进行（Demo stepper：标签 + 减 + 数值 + 加） */
 @Composable
-private fun StepperRow(label: String, value: String, onMinus: () -> Unit, onPlus: () -> Unit) {
+private fun StepperRow(
+    label: String,
+    value: String,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit,
+    extraAction: @Composable (() -> Unit)? = null
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (extraAction != null) {
+            Spacer(Modifier.width(8.dp))
+            extraAction()
+        }
         Spacer(Modifier.weight(1f))
         StepButton("-", onMinus)
         Text(

@@ -5,6 +5,8 @@
 
     <!-- 组间休息倒计时结束的震动提醒（PRD P0） -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- DeepSeek AI 智能食物营养匹配与菜谱生成 -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".ReliFitApp"

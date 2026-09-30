@@ -35,4 +35,16 @@ object UnitConverter {
         val r = (v * 10).roundToInt() / 10.0
         return if (r % 1.0 == 0.0) r.toInt().toString() else r.toString()
     }
+
+    /**
+     * 动态估算单次最大极限重量 (1RM: One Rep Max)
+     * 基于国际力量训练通用的 Epley 公式：1RM = weight * (1 + reps / 30.0)
+     * reps == 1 时即为当前重量；weight <= 0 或 reps <= 0 返回 0.0
+     */
+    fun estimate1RM(weightKg: Double, reps: Int): Double {
+        if (weightKg <= 0.0 || reps <= 0) return 0.0
+        if (reps == 1) return weightKg
+        val e = weightKg * (1.0 + reps / 30.0)
+        return (e * 10).roundToInt() / 10.0
+    }
 }

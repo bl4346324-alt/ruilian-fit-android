@@ -46,7 +46,12 @@ data class StatsUiState(
     // 近 7 天热量
     val dietLabels: List<String> = emptyList(),
     val dietValues: List<Float> = emptyList(),
-    val dietSub: String = ""
+    val dietSub: String = "",
+    // 打卡热力图 (Activity Heatmap)
+    val heatmapActivityMap: Map<Long, com.relifit.ui.components.HeatmapDayData> = emptyMap(),
+    val currentStreak: Int = 0,
+    val longestStreak: Int = 0,
+    val totalActiveDays: Int = 0
 )
 
 /**
@@ -159,6 +164,23 @@ class StatsViewModel(
         val dietLabels = dietDays.map { weekdayShort(it) }
         val dietValues = dietDays.map { dayTime -> (dietRows[dayTime] ?: 0.0).toFloat() }
 
+        // ===== 打卡热力图数据与连续天数 =====
+        val allLogs = workoutRepo.getAllLogs()
+        val activityMap = mutableMapOf<Long, com.relifit.ui.components.HeatmapDayData>()
+        val groupedLogs = allLogs.groupBy { TimeUtils.startOfDay(it.date) }
+        groupedLogs.forEach { (date, logs) ->
+            val c = logs.size
+            val v = logs.sumOf { it.totalVolumeKg }
+            val lvl = when {
+                v >= 8000 -> 3
+                v >= 3000 || c >= 2 -> 2
+                c >= 1 -> 1
+                else -> 0
+            }
+            activityMap[date] = com.relifit.ui.components.HeatmapDayData(date = date, count = c, volumeKg = v, level = lvl)
+        }
+        val (curStreak, longestStreak, totalActiveDays) = calculateStreaks(allLogs, now)
+
         _state.value = StatsUiState(
             period = period,
             loading = false,
@@ -183,8 +205,48 @@ class StatsViewModel(
             muscleSub = "${if (period == "周") "本周" else "本月"}训练次数分布",
             dietLabels = dietLabels,
             dietValues = dietValues,
-            dietSub = "近 7 天 · 每日摄入（今天高亮）"
+            dietSub = "近 7 天 · 每日摄入（今天高亮）",
+            heatmapActivityMap = activityMap,
+            currentStreak = curStreak,
+            longestStreak = longestStreak,
+            totalActiveDays = totalActiveDays
         )
+    }
+
+    private fun calculateStreaks(allLogs: List<com.relifit.data.local.entity.WorkoutLog>, now: Long): Triple<Int, Int, Int> {
+        val dayMillis = 24 * 3600 * 1000L
+        val activeDays = allLogs.map { TimeUtils.startOfDay(it.date) }.distinct().sorted()
+        if (activeDays.isEmpty()) return Triple(0, 0, 0)
+
+        val activeDaySet = activeDays.toSet()
+        val todayStart = TimeUtils.startOfDay(now)
+        val yesterdayStart = todayStart - dayMillis
+
+        // 1. 当前连续天数（今天打卡或昨天打卡均视为连续中）
+        var curStreak = 0
+        var checkDay = if (todayStart in activeDaySet) todayStart else if (yesterdayStart in activeDaySet) yesterdayStart else null
+        while (checkDay != null && checkDay in activeDaySet) {
+            curStreak++
+            checkDay -= dayMillis
+        }
+
+        // 2. 历史最长连续打卡天数
+        var maxStreak = 1
+        var tempStreak = 1
+        for (i in 1 until activeDays.size) {
+            if (activeDays[i] - activeDays[i - 1] == dayMillis) {
+                tempStreak++
+                if (tempStreak > maxStreak) maxStreak = tempStreak
+            } else if (activeDays[i] > activeDays[i - 1]) {
+                tempStreak = 1
+            }
+        }
+
+        // 3. 近半年打卡天数
+        val halfYearAgo = todayStart - 180 * dayMillis
+        val totalRecentDays = activeDays.count { it >= halfYearAgo }
+
+        return Triple(curStreak, maxStreak, totalRecentDays)
     }
 
     private suspend fun findExerciseId(name: String): Long? =

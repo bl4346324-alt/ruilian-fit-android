@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,13 +10,22 @@ android {
     namespace = "com.relifit"
     compileSdk = 34
 
+    val localProps = Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    val defaultDeepSeekApiKey: String = localProps.getProperty("DEEPSEEK_API_KEY", "")
+    val defaultDeepSeekModel: String = localProps.getProperty("DEEPSEEK_MODEL", "deepseek-chat").ifBlank { "deepseek-chat" }
+
     defaultConfig {
         applicationId = "com.relifit"
         minSdk = 26          // Android 8.0（PRD 强制约束）
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 8
+        versionName = "1.5.1"
         vectorDrawables { useSupportLibrary = true }
+        buildConfigField("String", "DEFAULT_DEEPSEEK_API_KEY", "\"$defaultDeepSeekApiKey\"")
+        buildConfigField("String", "DEFAULT_DEEPSEEK_MODEL", "\"$defaultDeepSeekModel\"")
     }
 
     // ===== 签名：独立 release keystore（app/release.keystore），不再用公开的 debug 签名 =====
@@ -41,7 +52,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     // Kotlin 1.9.22 对应的 Compose 编译器版本（1.5.10）
     composeOptions { kotlinCompilerExtensionVersion = "1.5.10" }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }

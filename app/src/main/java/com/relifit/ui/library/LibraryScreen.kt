@@ -18,7 +18,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
@@ -26,18 +28,24 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -67,6 +75,7 @@ fun LibraryScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    var showCreateDialog by remember { mutableStateOf(false) }
 
     // 提示消息（离线包状态 / 下载结果）
     LaunchedEffect(Unit) {
@@ -88,6 +97,22 @@ fun LibraryScreen(
                 darkTheme = darkTheme,
                 onToggleTheme = onToggleTheme,
                 extraActions = {
+                    // 新建自定义动作
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(18.dp))
+                            .clickable { showCreateDialog = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Filled.Add,
+                            "新建动作",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
                     // 离线包入口（Demo 云朵图标）
                     Box(
                         modifier = Modifier
@@ -174,6 +199,93 @@ fun LibraryScreen(
                 }
             }
         }
+    }
+
+    if (showCreateDialog) {
+        var name by remember { mutableStateOf("") }
+        var group by remember { mutableStateOf("胸") }
+        var equipment by remember { mutableStateOf("杠铃") }
+        var difficulty by remember { mutableStateOf("入门") }
+        var keyPoints by remember { mutableStateOf("") }
+        val allGroups = remember { listOf("胸", "背", "肩", "腿", "手臂", "核心", "有氧") }
+        val allEquipments = remember { listOf("杠铃", "哑铃", "器械", "自重", "绳索", "弹力带", "其他") }
+        val allDifficulties = remember { listOf("入门", "中级", "进阶") }
+
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text("新建自定义动作", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("动作名称") },
+                        placeholder = { Text("如：上斜哑铃卧推") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text("目标肌群", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        allGroups.forEach { g ->
+                            AppChip(text = g, selected = group == g, onClick = { group = g })
+                        }
+                    }
+
+                    Text("所需器械", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        allEquipments.forEach { eq ->
+                            AppChip(text = eq, selected = equipment == eq, onClick = { equipment = eq })
+                        }
+                    }
+
+                    Text("训练难度", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        allDifficulties.forEach { diff ->
+                            AppChip(text = diff, selected = difficulty == diff, onClick = { difficulty = diff })
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = keyPoints,
+                        onValueChange = { keyPoints = it },
+                        label = { Text("发力要点 (选填)") },
+                        placeholder = { Text("如：挺胸收腹，感受肌肉顶峰收缩") },
+                        maxLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (name.isNotBlank()) {
+                            viewModel.createExercise(name, group, equipment, difficulty, keyPoints)
+                            showCreateDialog = false
+                        }
+                    },
+                    enabled = name.isNotBlank()
+                ) {
+                    Text("创建")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 

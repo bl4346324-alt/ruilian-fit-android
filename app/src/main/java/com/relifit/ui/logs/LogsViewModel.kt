@@ -25,7 +25,8 @@ data class LogsUiState(
     val filter: String = "全部",                 // 全部 / 本月 / 上月
     val selectedDate: Long? = null,              // 按日期筛选（当日零点毫秒；null=未筛选）
     val logs: List<LogWithSets> = emptyList(),
-    val exerciseNames: Map<Long, String> = emptyMap()  // exerciseId -> 名称
+    val exerciseNames: Map<Long, String> = emptyMap(),  // exerciseId -> 名称
+    val loggedDates: Set<Long> = emptySet()      // 全部有训练记录的日期零点集合（用于打卡日历点亮）
 )
 
 /**
@@ -45,6 +46,7 @@ class LogsViewModel(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     val uiState: StateFlow<LogsUiState> = combine(allLogs, exNames, filter, selectedDate) { logs, names, f, date ->
+        val loggedDates = logs.map { TimeUtils.startOfDay(it.log.date) }.toSet()
         val day = 24 * 3600 * 1000L
         val filtered = if (date != null) {
             // 日历筛选：只看该日期当天的记录（优先级最高）
@@ -60,7 +62,13 @@ class LogsViewModel(
                 else -> logs
             }
         }
-        LogsUiState(filter = f, selectedDate = date, logs = filtered, exerciseNames = names)
+        LogsUiState(
+            filter = f,
+            selectedDate = date,
+            logs = filtered,
+            exerciseNames = names,
+            loggedDates = loggedDates
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LogsUiState())
 
     fun setFilter(f: String) { filter.value = f }

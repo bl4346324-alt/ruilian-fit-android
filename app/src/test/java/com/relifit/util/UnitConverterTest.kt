@@ -32,4 +32,13 @@ class UnitConverterTest {
         assertEquals("10.5", UnitConverter.format(10.5))
         assertEquals("10.6", UnitConverter.format(10.56))
     }
+
+    @Test
+    fun testEstimate1RM() {
+        assertEquals(0.0, UnitConverter.estimate1RM(0.0, 10), 0.001)
+        assertEquals(0.0, UnitConverter.estimate1RM(100.0, 0), 0.001)
+        assertEquals(100.0, UnitConverter.estimate1RM(100.0, 1), 0.001)
+        // 100 * (1 + 10 / 30.0) = 133.333... -> rounded to 133.3
+        assertEquals(133.3, UnitConverter.estimate1RM(100.0, 10), 0.001)
+    }
 }

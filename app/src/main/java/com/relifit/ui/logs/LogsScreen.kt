@@ -15,10 +15,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
@@ -26,6 +29,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -43,6 +47,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,7 +63,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * 训练记录页（Demo 布局）：日历按日期筛选 + 全部/本月/上月筛选 + 可折叠日志卡片
+ * 训练记录页（Demo 布局）：月历打卡视图 + 列表筛选 + 可折叠日志卡片
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,6 +78,7 @@ fun LogsScreen(
     val scope = rememberCoroutineScope()
     var deleteTarget by remember { mutableStateOf<Long?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var viewMode by rememberSaveable { mutableStateOf("calendar") } // "calendar" or "list"
     val expandedIds = rememberSaveable { mutableStateOf(setOf<Long>()) }
 
     Scaffold(
@@ -89,19 +96,20 @@ fun LogsScreen(
                 darkTheme = darkTheme,
                 onToggleTheme = onToggleTheme,
                 extraActions = {
-                    // 日历按钮：按日期筛选当天的训练记录
+                    // 视图切换按钮：月历打卡 / 简洁列表
                     Box(
                         modifier = Modifier
                             .size(52.dp)
                             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(18.dp))
-                            .clickable { showDatePicker = true },
+                            .clickable {
+                                viewMode = if (viewMode == "calendar") "list" else "calendar"
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Filled.CalendarMonth,
-                            null,
-                            tint = if (state.selectedDate != null) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
+                            if (viewMode == "calendar") Icons.AutoMirrored.Filled.ViewList else Icons.Filled.CalendarMonth,
+                            contentDescription = if (viewMode == "calendar") "切换列表视图" else "切换打卡月历",
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -126,19 +134,52 @@ fun LogsScreen(
             }
             Spacer(Modifier.height(12.dp))
 
-            // 按日期筛选时显示日期条；否则显示 全部/本月/上月 chips
-            val selDate = state.selectedDate
-            if (selDate != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AppChip(text = "${TimeUtils.formatShort(selDate)} 的记录", selected = true, onClick = { showDatePicker = true })
-                    AppChip(text = "清除", selected = false, onClick = { viewModel.setSelectedDate(null) })
+            if (viewMode == "calendar") {
+                // ===== 月历打卡视图 =====
+                WorkoutMonthCalendar(
+                    loggedDates = state.loggedDates,
+                    selectedDate = state.selectedDate,
+                    onSelectDate = { viewModel.setSelectedDate(it) }
+                )
+                Spacer(Modifier.height(12.dp))
+                val selDate = state.selectedDate
+                if (selDate != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "${TimeUtils.formatShort(selDate)} 训练记录",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "查看全部记录",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { viewModel.setSelectedDate(null) }
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf("全部", "本月", "上月").forEach { f ->
-                        AppChip(text = f, selected = state.filter == f, onClick = { viewModel.setFilter(f) })
+                // ===== 列表筛选模式 =====
+                val selDate = state.selectedDate
+                if (selDate != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AppChip(text = "${TimeUtils.formatShort(selDate)} 的记录", selected = true, onClick = { showDatePicker = true })
+                        AppChip(text = "清除", selected = false, onClick = { viewModel.setSelectedDate(null) })
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        listOf("全部", "本月", "上月").forEach { f ->
+                            AppChip(text = f, selected = state.filter == f, onClick = { viewModel.setFilter(f) })
+                        }
                     }
                 }
+                Spacer(Modifier.height(10.dp))
             }
 
             Spacer(Modifier.height(14.dp))
@@ -291,6 +332,12 @@ private fun LogCard(
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         sets.sortedBy { it.setIndex }.forEach { s ->
+                            val (tagBg, tagColor, tagText) = when (s.setType) {
+                                "WARMUP" -> Triple(Color(0xFFFFF3E0), Color(0xFFF57C00), "W")
+                                "DROP" -> Triple(Color(0xFFF3E5F5), Color(0xFF7B1FA2), "D")
+                                "FAILURE" -> Triple(Color(0xFFFFEBEE), Color(0xFFD32F2F), "F")
+                                else -> Triple(Color.Transparent, Color.Transparent, null)
+                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
@@ -300,8 +347,21 @@ private fun LogCard(
                                     )
                                     .padding(horizontal = 10.dp, vertical = 5.dp)
                             ) {
-                                Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
+                                if (tagText != null) {
+                                    Text(
+                                        text = tagText,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = tagColor,
+                                        modifier = Modifier
+                                            .background(tagBg, RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                    Spacer(Modifier.width(5.dp))
+                                } else {
+                                    Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                }
                                 Text(
                                     if (s.weightKg > 0) "${formatW(s.weightKg)}×${s.reps}" else "自重×${s.reps}",
                                     fontSize = 13.sp,
@@ -333,3 +393,178 @@ private fun formatW(w: Double): String {
     val r = (w * 10).roundToInt() / 10.0
     return if (r % 1.0 == 0.0) r.toInt().toString() else r.toString()
 }
+
+/** 月度打卡日历视图组件 */
+@Composable
+private fun WorkoutMonthCalendar(
+    loggedDates: Set<Long>,
+    selectedDate: Long?,
+    onSelectDate: (Long?) -> Unit
+) {
+    var calMonthOffset by remember { mutableStateOf(0) }
+    val now = remember { java.util.Calendar.getInstance() }
+    val displayCal = remember(calMonthOffset) {
+        (now.clone() as java.util.Calendar).apply {
+            add(java.util.Calendar.MONTH, calMonthOffset)
+        }
+    }
+    val year = displayCal.get(java.util.Calendar.YEAR)
+    val month = displayCal.get(java.util.Calendar.MONTH)
+
+    val daysInMonth = remember(year, month) {
+        getDaysInMonth(year, month)
+    }
+
+    val monthLoggedCount = remember(daysInMonth, loggedDates) {
+        daysInMonth.filterNotNull().count { it in loggedDates }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .softCardShadow(24)
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(24.dp))
+            .padding(16.dp)
+    ) {
+        // 头部：年月切换 + 本月打卡统计
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            IconButton(
+                onClick = { calMonthOffset -= 1 },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(Icons.Filled.ChevronLeft, "上一月", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "${year}年 ${month + 1}月",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "本月已打卡 $monthLoggedCount 天",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            IconButton(
+                onClick = { calMonthOffset += 1 },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(Icons.Filled.ChevronRight, "下一月", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // 星期标头
+        val weekdays = listOf("一", "二", "三", "四", "五", "六", "日")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+            weekdays.forEach { w ->
+                Text(
+                    w,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(36.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // 日历网格（以 7 天为一行）
+        val chunks = daysInMonth.chunked(7)
+        chunks.forEach { week ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                horizontalArrangement = Arrangement.SpaceAround
+            ) {
+                week.forEach { dayMillis ->
+                    if (dayMillis == null) {
+                        Spacer(Modifier.size(36.dp))
+                    } else {
+                        val isLogged = dayMillis in loggedDates
+                        val isSelected = selectedDate == dayMillis
+                        val dayNum = java.util.Calendar.getInstance().apply { timeInMillis = dayMillis }
+                            .get(java.util.Calendar.DAY_OF_MONTH)
+
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        isSelected -> MaterialTheme.colorScheme.primary
+                                        isLogged -> MaterialTheme.colorScheme.primaryContainer
+                                        else -> Color.Transparent
+                                    }
+                                )
+                                .clickable {
+                                    if (isSelected) onSelectDate(null)
+                                    else onSelectDate(dayMillis)
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    "$dayNum",
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isLogged || isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = when {
+                                        isSelected -> MaterialTheme.colorScheme.onPrimary
+                                        isLogged -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        else -> MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                                if (isLogged && !isSelected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(4.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                // 补齐末尾空白
+                repeat(7 - week.size) {
+                    Spacer(Modifier.size(36.dp))
+                }
+            }
+        }
+    }
+}
+
+private fun getDaysInMonth(year: Int, month: Int): List<Long?> {
+    val cal = java.util.Calendar.getInstance()
+    cal.set(java.util.Calendar.YEAR, year)
+    cal.set(java.util.Calendar.MONTH, month)
+    cal.set(java.util.Calendar.DAY_OF_MONTH, 1)
+    cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+    cal.set(java.util.Calendar.MINUTE, 0)
+    cal.set(java.util.Calendar.SECOND, 0)
+    cal.set(java.util.Calendar.MILLISECOND, 0)
+
+    val maxDays = cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+    val firstDayOfWeek = (cal.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7
+
+    val list = mutableListOf<Long?>()
+    for (i in 0 until firstDayOfWeek) {
+        list.add(null)
+    }
+    for (day in 1..maxDays) {
+        cal.set(java.util.Calendar.DAY_OF_MONTH, day)
+        list.add(cal.timeInMillis)
+    }
+    return list
+}
+

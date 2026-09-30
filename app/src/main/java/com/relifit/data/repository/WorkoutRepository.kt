@@ -13,12 +13,28 @@ class WorkoutRepository(private val dao: WorkoutDao) {
 
     fun observeLogsWithSets(): Flow<List<LogWithSets>> = dao.observeLogsWithSets()
 
+    fun observeLogs(): Flow<List<WorkoutLog>> = dao.observeLogs()
+
+    suspend fun getAllLogs(): List<WorkoutLog> = dao.getAllLogs()
+
     suspend fun getLogsBetween(start: Long, end: Long): List<WorkoutLog> = dao.getLogsBetween(start, end)
 
     /** 保存一次完整训练：插入 WorkoutLog + 全部 SetRecord（DAO 层事务原子提交） */
     suspend fun saveWorkout(log: WorkoutLog, sets: List<SetRecord>): Long = dao.saveWorkoutTx(log, sets)
 
     suspend fun deleteLog(id: Long) = dao.deleteLog(id)
+
+    suspend fun getPreviousSetsForExercise(exerciseId: Long): List<SetRecord> =
+        dao.getPreviousSetsForExercise(exerciseId)
+
+    suspend fun getMaxWeightHistorical(exerciseId: Long): Double? =
+        dao.getMaxWeightHistorical(exerciseId)
+
+    suspend fun countCompletedSetsForExercise(exerciseId: Long): Int =
+        dao.countCompletedSetsForExercise(exerciseId)
+
+    suspend fun getRecentSetsForExercise(exerciseId: Long, limit: Int = 20): List<SetRecord> =
+        dao.getRecentSetsForExercise(exerciseId, limit)
 
     // ===== 统计 =====
     suspend fun countInRange(start: Long, end: Long): Int = dao.countInRange(start, end)

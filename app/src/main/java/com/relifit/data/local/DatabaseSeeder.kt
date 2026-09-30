@@ -3,16 +3,17 @@ package com.relifit.data.local
 import androidx.room.withTransaction
 import com.relifit.data.local.entity.Exercise
 import com.relifit.data.local.entity.ExerciseEntry
+import com.relifit.data.local.entity.Recipe
 import com.relifit.data.local.entity.WorkoutDay
 import com.relifit.data.local.entity.WorkoutPlan
 
 /**
- * 种子数据：首次启动写入 47 个动作（六大肌群 + 有氧/恢复）+ 7 套内置模板
+ * 种子数据：首次启动写入 47 个动作（六大肌群 + 有氧/恢复）+ 7 套内置模板 + 10 套控油盐健身菜谱
  * 由 ReliFitApp 启动时调用，避免在 Room 回调中嵌套查询
  */
 object SeedData {
 
-    /** 整体在事务内执行；动作表/计划表分别判断（半初始化可被下次补齐） */
+    /** 整体在事务内执行；动作表/计划表/菜谱表分别判断（半初始化可被下次补齐） */
     suspend fun seedIfEmpty(db: AppDatabase) {
         db.withTransaction {
             if (db.exerciseDao().count() == 0) {
@@ -21,6 +22,9 @@ object SeedData {
             val exMap = db.exerciseDao().getAll().associate { it.name to it.id }
             if (db.planDao().count() == 0L) {
                 seedPlans(db, exMap)
+            }
+            if (db.recipeDao().count() == 0) {
+                db.recipeDao().insertAll(seedRecipes())
             }
         }
     }
@@ -388,5 +392,152 @@ object SeedData {
                 )
             )
         }
+    }
+
+    // ==================== 控油盐健身高蛋白菜谱种子（10 套） ====================
+
+    private fun seedRecipes(): List<Recipe> {
+        return listOf(
+            Recipe(
+                name = "黑椒香煎鸡胸肉",
+                category = "高蛋白增肌",
+                prepTimeMin = 15,
+                difficulty = "简单",
+                oilGram = 3.0,
+                saltGram = 1.5,
+                proteinG = 46.0,
+                carbsG = 2.0,
+                fatG = 5.5,
+                kcal = 245.0,
+                ingredients = "鲜鸡胸肉 200g\n橄榄油 3g (喷雾或油刷)\n海盐 1.5g\n黑胡椒碎 2g\n蒜末 5g\n生抽 5ml",
+                instructions = "1. 鸡胸肉改花刀，加蒜末、生抽、海盐黑椒腌制10分钟；\n2. 平底锅刷3g橄榄油，中火每面煎3分钟至微金黄；\n3. 盖上锅盖关火焖2分钟锁住肉汁即可出锅。"
+            ),
+            Recipe(
+                name = "时蔬彩椒牛肉粒",
+                category = "高蛋白增肌",
+                prepTimeMin = 15,
+                difficulty = "简单",
+                oilGram = 4.0,
+                saltGram = 1.8,
+                proteinG = 42.0,
+                carbsG = 8.0,
+                fatG = 7.0,
+                kcal = 265.0,
+                ingredients = "牛里脊肉 180g\n彩椒 100g\n橄榄油 4g\n食用盐 1.8g\n黑胡椒 2g\n料酒 5ml\n生抽 5ml",
+                instructions = "1. 牛里脊切丁，加生抽、料酒、黑胡椒腌制；\n2. 热锅入4g油，大火快速滑炒牛肉粒至变色盛出；\n3. 下彩椒翻炒1分钟断生，倒入牛肉粒加盐爆炒30秒出锅。"
+            ),
+            Recipe(
+                name = "鲜虾滑嫩豆腐煲",
+                category = "极低脂减脂",
+                prepTimeMin = 20,
+                difficulty = "简单",
+                oilGram = 2.0,
+                saltGram = 1.5,
+                proteinG = 38.0,
+                carbsG = 5.0,
+                fatG = 4.5,
+                kcal = 215.0,
+                ingredients = "鲜虾仁 180g\n嫩豆腐 150g\n芝麻香油 2g\n食盐 1.5g\n姜丝 3g\n葱花 5g\n白胡椒粉 1g",
+                instructions = "1. 砂锅加入少许清水与姜丝，放入豆腐块大火煮沸；\n2. 虾仁开背去虾线，下入锅中煮至变色卷曲；\n3. 加入盐与白胡椒粉调味，淋入2g香油撒葱花即可。"
+            ),
+            Recipe(
+                name = "香煎柠檬三文鱼配芦笋",
+                category = "优质脂肪",
+                prepTimeMin = 15,
+                difficulty = "简单",
+                oilGram = 2.0,
+                saltGram = 1.2,
+                proteinG = 35.0,
+                carbsG = 4.0,
+                fatG = 14.0,
+                kcal = 285.0,
+                ingredients = "三文鱼排 160g\n鲜芦笋 120g\n橄榄油 2g\n低钠海盐 1.2g\n黑胡椒 1g\n柠檬 2片",
+                instructions = "1. 三文鱼吸干水分，表面撒海盐与黑胡椒；\n2. 平底锅刷2g油，鱼皮朝下慢煎至金黄酥脆后翻面；\n3. 锅旁下芦笋一同煎熟，装盘淋上新鲜柠檬汁。"
+            ),
+            Recipe(
+                name = "无油空气炸蒜香鸡翅",
+                category = "高蛋白增肌",
+                prepTimeMin = 25,
+                difficulty = "简单",
+                oilGram = 0.0,
+                saltGram = 2.0,
+                proteinG = 36.0,
+                carbsG = 3.0,
+                fatG = 12.0,
+                kcal = 265.0,
+                ingredients = "鸡翅中 6只(约200g)\n大蒜 4瓣(拍蒜末)\n生抽 10ml\n蚝油 5ml\n食盐 2.0g\n辣椒粉(可选)",
+                instructions = "1. 鸡翅正反划两刀，加蒜末、生抽、蚝油、盐抓匀腌20分钟；\n2. 放入空气炸锅炸篮（无需刷油，逼出自身油脂）；\n3. 180℃烤12分钟，翻面再烤8分钟至金黄酥脆。"
+            ),
+            Recipe(
+                name = "彩蔬鸡蛋水炒荞麦面",
+                category = "均衡轻食",
+                prepTimeMin = 15,
+                difficulty = "简单",
+                oilGram = 3.0,
+                saltGram = 1.5,
+                proteinG = 22.0,
+                carbsG = 48.0,
+                fatG = 8.0,
+                kcal = 350.0,
+                ingredients = "全麦荞麦面 60g(干重)\n鸡蛋 2个\n甘蓝/圆白菜 100g\n胡萝卜丝 30g\n植物油 3g\n食用盐 1.5g\n生抽 8ml",
+                instructions = "1. 荞麦面开水煮熟捞出过凉水沥干；\n2. 锅内刷3g油炒散鸡蛋盛出备用；\n3. 加2勺水焖炒蔬菜丝断生，倒入荞麦面、鸡蛋、生抽和盐大火翻炒均匀。"
+            ),
+            Recipe(
+                name = "清蒸巴沙鱼柳配西兰花",
+                category = "极低脂减脂",
+                prepTimeMin = 12,
+                difficulty = "简单",
+                oilGram = 2.0,
+                saltGram = 1.5,
+                proteinG = 34.0,
+                carbsG = 6.0,
+                fatG = 2.5,
+                kcal = 185.0,
+                ingredients = "巴沙鱼柳 200g\n西兰花 120g\n橄榄油 2g\n食盐 1.5g\n蒸鱼豉油 10ml\n生姜 5g",
+                instructions = "1. 巴沙鱼切斜刀厚片，铺姜丝抹少许盐；\n2. 水烧开上汽后大火蒸6分钟关火；\n3. 西兰花水煮摆盘，淋入蒸鱼豉油与2g温热橄榄油。"
+            ),
+            Recipe(
+                name = "秘制高蛋白卤酱牛肉",
+                category = "高蛋白增肌",
+                prepTimeMin = 60,
+                difficulty = "中等",
+                oilGram = 0.0,
+                saltGram = 2.5,
+                proteinG = 52.0,
+                carbsG = 1.0,
+                fatG = 4.5,
+                kcal = 255.0,
+                ingredients = "牛腱子肉 300g(生重，成熟约180g)\n生抽 15ml\n老抽 5ml\n食盐 2.5g\n姜片 10g\n八角 1个\n桂皮 1小块",
+                instructions = "1. 牛腱肉冷水下锅加姜片焯水去血沫捞出；\n2. 锅中倒入清水、卤料、生抽老抽与盐，小火慢炖50分钟；\n3. 关火浸泡2小时更入味，冷藏后逆纹切薄片即食。"
+            ),
+            Recipe(
+                name = "双椒魔芋丝炒纯瘦里脊",
+                category = "极低脂减脂",
+                prepTimeMin = 15,
+                difficulty = "简单",
+                oilGram = 3.5,
+                saltGram = 1.8,
+                proteinG = 32.0,
+                carbsG = 5.0,
+                fatG = 6.0,
+                kcal = 205.0,
+                ingredients = "纯瘦猪里脊 150g\n魔芋丝结 150g\n青红椒 80g\n植物油 3.5g\n食盐 1.8g\n生抽 8ml\n白胡椒 1g",
+                instructions = "1. 魔芋丝焯水1分钟去碱味捞出沥干；\n2. 里脊切丝加少许生抽抓匀；\n3. 锅内入3.5g油滑炒肉丝至变色，加入双椒与魔芋丝加盐大火快炒出锅。"
+            ),
+            Recipe(
+                name = "番茄鲜虾高蛋白浓汤",
+                category = "极低脂减脂",
+                prepTimeMin = 15,
+                difficulty = "简单",
+                oilGram = 2.0,
+                saltGram = 1.5,
+                proteinG = 35.0,
+                carbsG = 9.0,
+                fatG = 4.0,
+                kcal = 210.0,
+                ingredients = "大番茄 1个(去皮切碎)\n鲜海虾 8只(约150g)\n老豆腐 120g\n橄榄油 2g\n食盐 1.5g\n清水 400ml\n葱花少许",
+                instructions = "1. 锅内入2g橄榄油，炒烂番茄丁炒出浓郁红汤；\n2. 加入400ml清水煮沸，下入豆腐块煮3分钟；\n3. 下入鲜虾煮至变色弯曲，加盐调味撒葱花出锅。"
+            )
+        )
     }
 }

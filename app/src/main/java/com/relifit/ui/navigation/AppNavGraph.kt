@@ -5,10 +5,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,29 +30,25 @@ import androidx.navigation.navArgument
 import com.relifit.ui.body.BodyScreen
 import com.relifit.ui.diet.DietScreen
 import com.relifit.ui.exerciseDetail.ExerciseDetailScreen
-import com.relifit.ui.home.HomeScreen
-import com.relifit.ui.library.LibraryScreen
-import com.relifit.ui.logs.LogsScreen
 import com.relifit.ui.plan.PlanDetailScreen
 import com.relifit.ui.plan.PlanListScreen
 import com.relifit.ui.settings.SettingsScreen
-import com.relifit.ui.stats.StatsScreen
+import com.relifit.ui.stats.StatsOverviewScreen
 import com.relifit.ui.workout.WorkoutScreen
+import com.relifit.ui.workoutHub.WorkoutHubScreen
 
-/** 底部导航 5 个 Tab 定义（与 Demo 顺序一致） */
+/** 底部导航 3 大主界面（首页、饮食、锻炼） */
 private data class NavItem(val route: String, val label: String, val icon: ImageVector)
 
 private val navItems = listOf(
-    NavItem(Routes.HOME, "首页", Icons.Filled.Home),
-    NavItem(Routes.LIBRARY, "动作库", Icons.Filled.FitnessCenter),
-    NavItem(Routes.LOGS, "训练记录", Icons.Filled.ReceiptLong),
-    NavItem(Routes.DIET, "饮食记录", Icons.Filled.Restaurant),
-    NavItem(Routes.STATS, "数据统计", Icons.Filled.BarChart)
+    NavItem(Routes.HOME_HUB, "首页", Icons.Filled.Home),
+    NavItem(Routes.DIET, "饮食", Icons.Filled.Restaurant),
+    NavItem(Routes.WORKOUT_HUB, "锻炼", Icons.Filled.FitnessCenter)
 )
 
 /**
- * 全局导航图：Scaffold + 底部导航 + NavHost
- * 子页面（训练进行中/动作详情/计划详情/身体数据/设置）隐藏底部导航，与 Demo 一致
+ * 全局导航图：Scaffold + 底部导航（三大界面） + NavHost
+ * 子页面（训练进行中/动作详情/计划详情/身体数据/设置）隐藏底部导航
  */
 @Composable
 fun AppNavGraph(darkTheme: Boolean, onToggleTheme: () -> Unit) {
@@ -64,8 +58,7 @@ fun AppNavGraph(darkTheme: Boolean, onToggleTheme: () -> Unit) {
     val showBottomBar = currentRoute in Routes.topLevel
 
     /**
-     * 统一的顶部 Tab 导航（修复：页内"查看统计"若用普通 navigate 跳 Tab，
-     * 会与底部导航的 saveState/restoreState 模式混用，导致返回该 Tab 时无响应）。
+     * 统一的顶部 Tab 导航
      * 底部导航与页内跳转都走这里，保证每个 Tab 只保留一份、状态一致。
      */
     val navigateToTab: (String) -> Unit = { route ->
@@ -119,11 +112,12 @@ fun AppNavGraph(darkTheme: Boolean, onToggleTheme: () -> Unit) {
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = Routes.HOME,
+            startDestination = Routes.HOME_HUB,
             modifier = Modifier.padding(padding)
         ) {
-            composable(Routes.HOME) {
-                HomeScreen(
+            // ===== 1. 首页主界面（今日安排 + 数据统计整合） =====
+            composable(Routes.HOME_HUB) {
+                StatsOverviewScreen(
                     onOpenPlan = { navController.navigate(Routes.plan(it)) },
                     onOpenPlans = { navController.navigate(Routes.PLANS) },
                     onStartWorkout = { planId, dayId -> navController.navigate(Routes.workout(planId, dayId, null)) },
@@ -133,28 +127,26 @@ fun AppNavGraph(darkTheme: Boolean, onToggleTheme: () -> Unit) {
                     darkTheme = darkTheme
                 )
             }
-            composable(Routes.LIBRARY) {
-                LibraryScreen(
-                    onOpenExercise = { navController.navigate(Routes.exercise(it)) },
-                    onToggleTheme = onToggleTheme,
-                    darkTheme = darkTheme
-                )
-            }
-            composable(Routes.LOGS) {
-                LogsScreen(
-                    onToggleTheme = onToggleTheme,
-                    darkTheme = darkTheme,
-                    onOpenPlans = { navController.navigate(Routes.PLANS) }
-                )
-            }
+
+            // ===== 2. 饮食主界面 =====
             composable(Routes.DIET) {
                 DietScreen(
                     onToggleTheme = onToggleTheme,
                     darkTheme = darkTheme
                 )
             }
-            composable(Routes.STATS) {
-                StatsScreen(onToggleTheme = onToggleTheme, darkTheme = darkTheme)
+
+            // ===== 3. 锻炼主界面（动作 + 记录整合） =====
+            composable(Routes.WORKOUT_HUB) {
+                WorkoutHubScreen(
+                    onStartWorkout = { planId, dayId, exerciseId ->
+                        navController.navigate(Routes.workout(planId, dayId, exerciseId))
+                    },
+                    onOpenExercise = { navController.navigate(Routes.exercise(it)) },
+                    onOpenPlans = { navController.navigate(Routes.PLANS) },
+                    onToggleTheme = onToggleTheme,
+                    darkTheme = darkTheme
+                )
             }
 
             // ===== 子页面 =====

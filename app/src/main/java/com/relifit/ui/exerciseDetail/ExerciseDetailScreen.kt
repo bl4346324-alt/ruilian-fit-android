@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -45,10 +46,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.relifit.ui.components.AppChip
 import com.relifit.ui.components.softCardShadow
+import com.relifit.util.UnitConverter
 import kotlinx.coroutines.flow.collectLatest
 
 /**
- * 动作详情页（Demo 布局）：发力要点 + 易错提醒 + 呼吸节奏 + 加入训练
+ * 动作详情页（Demo 布局）：历史纪录 1RM + 发力要点 + 易错提醒 + 呼吸节奏 + 加入训练
  */
 @Composable
 fun ExerciseDetailScreen(
@@ -58,6 +60,7 @@ fun ExerciseDetailScreen(
     viewModel: ExerciseDetailViewModel = viewModel(factory = ExerciseDetailViewModel.Factory)
 ) {
     val ex by viewModel.exercise.collectAsStateWithLifecycle()
+    val stats by viewModel.stats.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -122,6 +125,102 @@ fun ExerciseDetailScreen(
                 AppChip(ex?.muscleGroup ?: "", selected = true, onClick = {})
                 AppChip(ex?.equipment ?: "", selected = true, onClick = {})
                 AppChip(ex?.difficulty ?: "", selected = true, onClick = {})
+            }
+
+            if (stats.totalSets > 0) {
+                Spacer(Modifier.height(14.dp))
+                // 历史训练表现卡片 (1RM & PR)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .softCardShadow(24)
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(24.dp))
+                        .padding(18.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "个人历史纪录 (PR)",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            "累计完成 ${stats.totalSets} 组",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                RoundedCornerShape(14.dp)
+                            )
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("历史最大重量", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                UnitConverter.weightText(stats.maxWeightKg, stats.unit),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("估算最佳 1RM", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                UnitConverter.weightText(stats.best1RM, stats.unit),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    if (stats.recentSets.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "近期完成记录",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            stats.recentSets.forEach { s ->
+                                Box(
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        "${UnitConverter.weightText(s.weightKg, stats.unit)} × ${s.reps}次",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             Spacer(Modifier.height(18.dp))

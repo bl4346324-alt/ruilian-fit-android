@@ -182,6 +182,29 @@ class BackupManager(
             root.put("dietGoal", goalObj)
         }
 
+        // 8. 健身菜谱（含自建菜谱）
+        val recipes = database.recipeDao().getAll()
+        val recipesArray = JSONArray()
+        for (r in recipes) {
+            val rObj = JSONObject().apply {
+                put("name", r.name)
+                put("category", r.category)
+                put("prepTimeMin", r.prepTimeMin)
+                put("difficulty", r.difficulty)
+                put("oilGram", r.oilGram)
+                put("saltGram", r.saltGram)
+                put("proteinG", r.proteinG)
+                put("carbsG", r.carbsG)
+                put("fatG", r.fatG)
+                put("kcal", r.kcal)
+                put("ingredients", r.ingredients)
+                put("instructions", r.instructions)
+                put("isCustom", r.isCustom)
+            }
+            recipesArray.put(rObj)
+        }
+        root.put("recipes", recipesArray)
+
         root.toString(2)
     }
 
@@ -419,9 +442,90 @@ class BackupManager(
                 )
             }
 
-            Result.success("备份恢复成功：已恢复 $importedPlanCount 个计划、$importedLogCount 条训练记录、$importedMetricCount 条身体数据")
+            // 8. 恢复菜谱
+            val recipesArray = root.optJSONArray("recipes")
+            var importedRecipeCount = 0
+            if (recipesArray != null) {
+                for (i in 0 until recipesArray.length()) {
+                    val rObj = recipesArray.getJSONObject(i)
+                    database.recipeDao().insert(
+                        com.relifit.data.local.entity.Recipe(
+                            id = 0,
+                            name = rObj.getString("name"),
+                            category = rObj.optString("category", "高蛋白增肌"),
+                            prepTimeMin = rObj.optInt("prepTimeMin", 15),
+                            difficulty = rObj.optString("difficulty", "简单"),
+                            oilGram = rObj.optDouble("oilGram", 3.0),
+                            saltGram = rObj.optDouble("saltGram", 1.5),
+                            proteinG = rObj.optDouble("proteinG", 30.0),
+                            carbsG = rObj.optDouble("carbsG", 10.0),
+                            fatG = rObj.optDouble("fatG", 5.0),
+                            kcal = rObj.optDouble("kcal", 200.0),
+                            ingredients = rObj.optString("ingredients", ""),
+                            instructions = rObj.optString("instructions", ""),
+                            isCustom = rObj.optBoolean("isCustom", false)
+                        )
+                    )
+                    importedRecipeCount++
+                }
+            }
+
+            Result.success("备份恢复成功：已恢复 $importedPlanCount 个计划、$importedLogCount 条训练记录、$importedMetricCount 条身体数据、$importedRecipeCount 套食谱")
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * 导出训练记录与组明细为通用 CSV 格式
+     * 含 UTF-8 BOM，确保 Excel / WPS 等工具打开中文无乱码
+     */
+    suspend fun exportWorkoutLogsCsv(): String = withContext(Dispatchers.IO) {
+        val logs = database.workoutDao().getAllLogs()
+        val allExercises = database.exerciseDao().getAll().associateBy { it.id }
+        val sb = StringBuilder()
+        sb.append("\uFEFF") // UTF-8 BOM
+        sb.append("日期,时间,计划ID,训练备注,总时长(分钟),总容量(kg),动作名称,肌群,器械,组号,重量(kg),次数,组容量(kg)\n")
+        val sdfDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        val sdfTime = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+        for (log in logs) {
+            val dateStr = sdfDate.format(java.util.Date(log.date))
+            val timeStr = sdfTime.format(java.util.Date(log.date))
+            val sets = database.workoutDao().getSets(log.id)
+            val noteSafe = "\"${log.note.replace("\"", "\"\"")}\""
+            if (sets.isEmpty()) {
+                sb.append("$dateStr,$timeStr,${log.planId ?: ""},$noteSafe,${log.durationMin},${log.totalVolumeKg},,,,,,\n")
+            } else {
+                for (s in sets) {
+                    val ex = allExercises[s.exerciseId]
+                    val exName = "\"${(ex?.name ?: "动作#${s.exerciseId}").replace("\"", "\"\"")}\""
+                    val muscle = ex?.muscleGroup ?: ""
+                    val equip = ex?.equipment ?: ""
+                    val vol = kotlin.math.round((s.weightKg * s.reps) * 10) / 10.0
+                    sb.append("$dateStr,$timeStr,${log.planId ?: ""},$noteSafe,${log.durationMin},${log.totalVolumeKg},$exName,$muscle,$equip,${s.setIndex},${s.weightKg},${s.reps},$vol\n")
+                }
+            }
+        }
+        sb.toString()
+    }
+
+    /**
+     * 导出身体数据为通用 CSV 格式
+     * 含 UTF-8 BOM，确保 Excel / WPS 等工具打开中文无乱码
+     */
+    suspend fun exportBodyMetricsCsv(): String = withContext(Dispatchers.IO) {
+        val list = database.bodyMetricDao().getAll()
+        val sb = StringBuilder()
+        sb.append("\uFEFF") // UTF-8 BOM
+        sb.append("日期,体重(kg),身高(cm),每日运动量\n")
+        val sdfDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        for (b in list) {
+            val dateStr = sdfDate.format(java.util.Date(b.date))
+            val w = b.weightKg?.toString() ?: ""
+            val h = b.heightCm?.toString() ?: ""
+            val act = b.dailyActivity?.toString() ?: ""
+            sb.append("$dateStr,$w,$h,$act\n")
+        }
+        sb.toString()
     }
 }
